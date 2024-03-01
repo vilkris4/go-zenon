@@ -44,7 +44,7 @@ func NewMomentumContent(blocks []*AccountBlock) MomentumContent {
 		header := blocks[i].Header()
 		content[i] = &header
 	}
-	sort.Slice(content, AccountBlockHeaderComparer(content))
+	sort.SliceStable(content, AccountBlockHeaderComparer(content))
 	return content
 }
 
