@@ -1,6 +1,7 @@
 package db
 
 import (
+	"fmt"
 	"runtime"
 	"sync"
 
@@ -259,7 +260,12 @@ func (m *ldbManager) Get(identifier types.HashHeight) DB {
 		toIdentifier = identifier
 	}
 
+	rollbackCount := frontierIdentifier.Height - toIdentifier.Height
+	fmt.Printf("Rolling back %d momentums at height %d\n", rollbackCount, frontierIdentifier.Height)
 	for i := toIdentifier.Height + 1; i <= frontierIdentifier.Height; i += 1 {
+		if i%1000 == 0 {
+			fmt.Printf("Rolling back height %d\n", i)
+		}
 		rollback := m.getRollback(i)
 		if err := ApplyWithoutOverride(rawChanges, rollback); err != nil {
 			common.DealWithErr(err)
