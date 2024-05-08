@@ -2,6 +2,7 @@ package implementation
 
 import (
 	"encoding/base64"
+	"fmt"
 	"math/big"
 	"regexp"
 	"sort"
@@ -569,6 +570,7 @@ func updatePillarRewards(context vm_context.AccountVmContext) error {
 			pillarLog.Error("unknown panic", "reason", err)
 			return err
 		}
+		fmt.Println("Updating pillar rewards")
 		if err := computeDetailedPillarReward(context, uint64(lastEpoch.LastEpoch)); err != nil {
 			return err
 		}

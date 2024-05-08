@@ -22,7 +22,6 @@ import (
 	"github.com/zenon-network/go-zenon/protocol"
 	"github.com/zenon-network/go-zenon/verifier"
 	"github.com/zenon-network/go-zenon/vm"
-	"github.com/zenon-network/go-zenon/vm/vm_context"
 	"github.com/zenon-network/go-zenon/zenon"
 )
 
@@ -145,7 +144,11 @@ func (zenon *mockZenon) SyncState() protocol.SyncState {
 func (zenon *mockZenon) CreateMomentum(momentumTransaction *nom.MomentumTransaction) {
 	insert := zenon.chain.AcquireInsert("mock-zenon create-momentum")
 	defer insert.Unlock()
-	err := zenon.chain.AddMomentumTransaction(insert, momentumTransaction)
+	err := zenon.chain.AddArchiveTransaction(insert, momentumTransaction)
+	if err != nil {
+		panic(fmt.Errorf("failed to insert own momentum to archive. reason:%w", err))
+	}
+	err = zenon.chain.AddMomentumTransaction(insert, momentumTransaction)
 	if err != nil {
 		panic(fmt.Errorf("failed to insert own momentum. reason:%w", err))
 	}
@@ -265,23 +268,19 @@ func (zenon *mockZenon) InsertReceiveBlock(fromHeader types.AccountHeader, templ
 	return nil
 }
 
-func (zenon *mockZenon) EmbeddedContext(address types.Address) vm_context.AccountVmContext {
-	momentumStore := zenon.chain.GetFrontierMomentumStore()
-	accountStore := zenon.chain.GetFrontierAccountStore(address)
-
-	return vm_context.NewAccountContext(
-		momentumStore,
-		accountStore,
-		zenon.consensus.FixedPillarReader(momentumStore.Identifier()),
-	)
-
-}
-
 func (zenon *mockZenon) SaveLogs(logger common.Logger) *common.Expecter {
 	return common.SaveLogs(logger)
 }
 func (zenon *mockZenon) ExpectBalance(address types.Address, standard types.ZenonTokenStandard, expected int64) {
 	amount, err := zenon.chain.GetFrontierAccountStore(address).GetBalance(standard)
+	common.FailIfErr(zenon.t, err)
+	if amount == nil {
+		amount = big.NewInt(0)
+	}
+	common.ExpectAmount(zenon.t, amount, big.NewInt(expected))
+}
+func (zenon *mockZenon) ExpectArchiveFusedAmount(address types.Address, expected int64) {
+	amount, err := zenon.chain.GetFrontierArchiveStore().GetStakeBeneficialAmount(address)
 	common.FailIfErr(zenon.t, err)
 	if amount == nil {
 		amount = big.NewInt(0)
@@ -366,7 +365,7 @@ func newMockZenon(t common.T, customEpochDuration time.Duration) MockZenon {
 	common.SupervisorLogger.SetHandler(log15.LvlFilterHandler(log15.LvlError, log15.StderrHandler))
 	consensus.EpochDuration = customEpochDuration
 
-	ch := chain.NewChain(db.NewLevelDBManager(t.TempDir()), genesis.NewGenesis(g.EmbeddedGenesis))
+	ch := chain.NewChain(db.NewLevelDBManager(t.TempDir(), false), db.NewLevelDBManager(t.TempDir(), true), genesis.NewGenesis(g.EmbeddedGenesis))
 	cs := consensus.NewConsensus(db.NewMemDB(), ch, true)
 	supervisor := vm.NewSupervisor(ch, cs)
 	zenon := &mockZenon{

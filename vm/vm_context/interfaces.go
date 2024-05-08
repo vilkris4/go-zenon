@@ -12,6 +12,7 @@ import (
 type AccountVmContext interface {
 	api.PillarReader
 	store.Account
+	ArchiveStore() store.Archive
 	MomentumStore() store.Momentum
 
 	// ====== State ======

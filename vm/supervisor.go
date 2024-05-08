@@ -45,6 +45,31 @@ func NewSupervisor(chain chain.Chain, consensus consensus.Consensus) *Supervisor
 }
 
 func (s *Supervisor) newBlockContext(block *nom.AccountBlock) vm_context.AccountVmContext {
+	if types.IsEmbeddedAddress(block.Address) {
+		return s.newEmbeddedBlockContext(block)
+	} else {
+		return s.newUserBlockContext(block)
+	}
+}
+
+func (s *Supervisor) newUserBlockContext(block *nom.AccountBlock) vm_context.AccountVmContext {
+	accountStore := s.chain.GetAccountStore(block.Address, block.Previous())
+	archiveStore := s.chain.GetArchiveStore(block.MomentumAcknowledged)
+	if archiveStore == nil {
+		panic(fmt.Sprintf("can't find archiveStore for %v", block.MomentumAcknowledged))
+	}
+	if accountStore == nil {
+		panic(fmt.Sprintf("can't find accountStore for %v %v", block.Address, block.Previous()))
+	}
+	return vm_context.NewAccountContext(
+		nil,
+		accountStore,
+		archiveStore,
+		nil,
+	)
+}
+
+func (s *Supervisor) newEmbeddedBlockContext(block *nom.AccountBlock) vm_context.AccountVmContext {
 	momentumStore := s.chain.GetMomentumStore(block.MomentumAcknowledged)
 	accountStore := s.chain.GetAccountStore(block.Address, block.Previous())
 	cache := s.consensus.FixedPillarReader(block.MomentumAcknowledged)
@@ -60,9 +85,11 @@ func (s *Supervisor) newBlockContext(block *nom.AccountBlock) vm_context.Account
 	return vm_context.NewAccountContext(
 		momentumStore,
 		accountStore,
+		nil,
 		cache,
 	)
 }
+
 func (s *Supervisor) newMomentumContext(momentum *nom.Momentum) vm_context.MomentumVMContext {
 	return vm_context.NewMomentumVMContext(
 		s.chain.GetMomentumStore(momentum.Previous()),
@@ -129,7 +156,7 @@ func (s *Supervisor) GenerateAutoReceive(sendBlock *nom.AccountBlock) (*Contract
 	if err := s.setBlockPlasma(context, template); err != nil {
 		return nil, err
 	}
-	vm := NewVM(context)
+	vm := NewVM(context, s.chain.GetFrontierMomentumStore())
 	block, methodErr, err := vm.generateEmbeddedReceive(template.FromBlockHash)
 	if err := s.verifier.AccountBlock(block); err != nil {
 		return nil, err
@@ -212,7 +239,7 @@ func (s *Supervisor) applyBlock(block *nom.AccountBlock, signFunc SignFunc) (tra
 		return nil, err
 	}
 	context := s.newBlockContext(block)
-	vm := NewVM(context)
+	vm := NewVM(context, s.chain.GetFrontierMomentumStore())
 	err := vm.applyBlock(block)
 	if err != nil {
 		return nil, err

@@ -13,20 +13,26 @@ type accountVmContext struct {
 	api.PillarReader
 	store.Account
 	momentumStore store.Momentum
+	archiveStore  store.Archive
 }
 
 func (ctx *accountVmContext) MomentumStore() store.Momentum {
 	return ctx.momentumStore
 }
 
-func NewAccountContext(momentumStore store.Momentum, accountBlock store.Account, pillarReader api.PillarReader) AccountVmContext {
+func (ctx *accountVmContext) ArchiveStore() store.Archive {
+	return ctx.archiveStore
+}
+
+func NewAccountContext(momentumStore store.Momentum, accountBlock store.Account, archiveStore store.Archive, pillarReader api.PillarReader) AccountVmContext {
 	return &accountVmContext{
 		momentumStore: momentumStore,
 		Account:       accountBlock,
+		archiveStore:  archiveStore,
 		PillarReader:  pillarReader,
 	}
 }
 
 func NewGenesisAccountContext(address types.Address) AccountVmContext {
-	return NewAccountContext(nil, account.NewAccountStore(address, db.NewMemDB()), nil)
+	return NewAccountContext(nil, account.NewAccountStore(address, db.NewMemDB()), nil, nil)
 }

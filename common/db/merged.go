@@ -1,6 +1,9 @@
 package db
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/comparer"
 )
@@ -16,12 +19,22 @@ type mergedDB struct {
 }
 
 func (u *mergedDB) Get(key []byte) ([]byte, error) {
+	index := 0
+	start := time.Now()
 	for _, db := range u.dbs {
 		if ok, err := db.Has(key); err != nil {
 			return nil, err
 		} else if ok {
+			if len(u.dbs) > 5 && index > 1 {
+				duration := time.Since(start)
+				fmt.Printf("Found key in db: %d/%d\n", index, len(u.dbs))
+				fmt.Printf("Key: %x\n", key)
+				fmt.Println(duration)
+				fmt.Println("************")
+			}
 			return db.Get(key)
 		}
+		index++
 	}
 	return nil, leveldb.ErrNotFound
 }

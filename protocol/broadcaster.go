@@ -31,7 +31,13 @@ func (b *broadcaster) SyncInfo() *SyncInfo {
 func (b *broadcaster) CreateMomentum(momentumTransaction *nom.MomentumTransaction) {
 	b.log.Info("creating own momentum", "identifier", momentumTransaction.Momentum.Identifier())
 	insert := b.chain.AcquireInsert(fmt.Sprintf("zenon - create momentum %v", momentumTransaction.Momentum.Identifier()))
-	err := b.chain.AddMomentumTransaction(insert, momentumTransaction)
+	err := b.chain.AddArchiveTransaction(insert, momentumTransaction)
+	if err != nil {
+		insert.Unlock()
+		b.log.Error("failed to insert own momentum to archive", "reason", err)
+		return
+	}
+	err = b.chain.AddMomentumTransaction(insert, momentumTransaction)
 	insert.Unlock()
 	if err != nil {
 		b.log.Error("failed to insert own momentum", "reason", err)

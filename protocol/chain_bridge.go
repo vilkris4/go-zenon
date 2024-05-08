@@ -172,6 +172,11 @@ func (c chainBridge) InsertChain(momentums []*nom.DetailedMomentum) (int, error)
 			return 0, errors.Errorf("won't insert side-chain which is not longer")
 		}
 
+		err = c.chain.RollbackArchiveTo(insert, target.Identifier())
+		if err != nil {
+			return 0, errors.Errorf("unable to rollback archive to %v. Reason:%v", target.Identifier(), err)
+		}
+
 		err = c.chain.RollbackTo(insert, target.Identifier())
 		if err != nil {
 			return 0, errors.Errorf("unable to rollback to %v. Reason:%v", target.Identifier(), err)
@@ -203,11 +208,16 @@ func (c chainBridge) InsertChain(momentums []*nom.DetailedMomentum) (int, error)
 		if err != nil {
 			return index + start, err
 		}
+		if err := c.chain.AddArchiveTransaction(insert, transaction); err != nil {
+			log.Error("error while inserting archive", "reason", err, "momentum-identifier", detailed.Momentum.Identifier())
+			return index + start, err
+		}
 		if err := c.chain.AddMomentumTransaction(insert, transaction); err != nil {
 			log.Error("error while inserting momentum", "reason", err, "momentum-identifier", detailed.Momentum.Identifier())
 			return index + start, err
 		}
 	}
+	fmt.Println("Done with batch")
 
 	return 0, nil
 }

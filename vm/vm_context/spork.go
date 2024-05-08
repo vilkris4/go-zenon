@@ -6,19 +6,37 @@ import (
 )
 
 func (ctx *accountVmContext) IsAcceleratorSporkEnforced() bool {
-	active, err := ctx.momentumStore.IsSporkActive(types.AcceleratorSpork)
-	common.DealWithErr(err)
-	return active
+	if ctx.archiveStore != nil {
+		active, err := ctx.archiveStore.IsSporkActive(types.AcceleratorSpork)
+		common.DealWithErr(err)
+		return active
+	} else {
+		active, err := ctx.momentumStore.IsSporkActive(types.AcceleratorSpork)
+		common.DealWithErr(err)
+		return active
+	}
 }
 
 func (ctx *accountVmContext) IsHtlcSporkEnforced() bool {
-	active, err := ctx.momentumStore.IsSporkActive(types.HtlcSpork)
-	common.DealWithErr(err)
-	return active
+	if ctx.archiveStore != nil {
+		active, err := ctx.archiveStore.IsSporkActive(types.HtlcSpork)
+		common.DealWithErr(err)
+		return active
+	} else {
+		active, err := ctx.momentumStore.IsSporkActive(types.HtlcSpork)
+		common.DealWithErr(err)
+		return active
+	}
 }
 
 func (ctx *accountVmContext) IsBridgeAndLiquiditySporkEnforced() bool {
-	active, err := ctx.momentumStore.IsSporkActive(types.BridgeAndLiquiditySpork)
-	common.DealWithErr(err)
-	return active
+	if ctx.archiveStore != nil {
+		active, err := ctx.archiveStore.IsSporkActive(types.BridgeAndLiquiditySpork)
+		common.DealWithErr(err)
+		return active
+	} else {
+		active, err := ctx.momentumStore.IsSporkActive(types.BridgeAndLiquiditySpork)
+		common.DealWithErr(err)
+		return active
+	}
 }
