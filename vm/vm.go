@@ -285,8 +285,9 @@ func NewMomentumVM(context vm_context.MomentumVMContext) *MomentumVM {
 func (vm *MomentumVM) applyMomentum(pool chain.AccountPool, momentum *nom.Momentum) error {
 	momentumStore := vm.context
 
+	frontierIdentifier := momentumStore.Identifier()
 	for _, header := range momentum.Content {
-		if err := momentumStore.AddAccountBlockTransaction(*header, pool.GetPatch(header.Address, header.Identifier())); err != nil {
+		if err := momentumStore.AddAccountBlockTransaction(*header, pool.GetPatch(header.Address, header.Identifier()), frontierIdentifier); err != nil {
 			return err
 		}
 	}
