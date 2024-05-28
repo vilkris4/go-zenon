@@ -43,12 +43,11 @@ func (ms *momentumStore) GetAccountMailbox(address types.Address) store.AccountM
 	return ms.getAccountMailbox(address).Snapshot()
 }
 
-func (ms *momentumStore) AddAccountBlockTransaction(header types.AccountHeader, patch db.Patch) error {
+func (ms *momentumStore) AddAccountBlockTransaction(header types.AccountHeader, patch db.Patch, identifier types.HashHeight) error {
 	// skip batched blocks
 	if len(patch.Dump()) == 0 {
 		return nil
 	}
-	identifier := ms.Identifier()
 	if err := ms.DB.Subset(getAccountStorePrefix(header.Address)).Apply(patch); err != nil {
 		return nil
 	}

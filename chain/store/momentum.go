@@ -55,5 +55,5 @@ type Momentum interface {
 	Snapshot() Momentum
 	Changes() (db.Patch, error)
 
-	AddAccountBlockTransaction(header types.AccountHeader, patch db.Patch) error
+	AddAccountBlockTransaction(header types.AccountHeader, patch db.Patch, identifier types.HashHeight) error
 }
