@@ -217,7 +217,6 @@ func (c chainBridge) InsertChain(momentums []*nom.DetailedMomentum) (int, error)
 			return index + start, err
 		}
 	}
-	fmt.Println("Done with batch")
 
 	return 0, nil
 }
