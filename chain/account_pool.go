@@ -40,6 +40,9 @@ func (am *accountManager) Add(transaction *nom.AccountBlockTransaction) error {
 		return err
 	}
 	am.blocks[transaction.Block.Height] = transaction.Block
+	for _, d := range transaction.Block.DescendantBlocks {
+		am.blocks[d.Height] = d
+	}
 	return nil
 }
 
@@ -277,14 +280,14 @@ func (ap *accountPool) rebuild(detailed *nom.DetailedMomentum) error {
 		log.Debug("start rebuilding")
 
 		stableIdentifier := db.GetFrontierIdentifier(ap.stable.GetStableAccountDB(address))
-		frontierIdentifier := db.GetFrontierIdentifier(ap.managers[address].db.Frontier())
+		frontierIdentifier := db.GetFrontierIdentifier(ap.getAccountManager(address).db.Frontier())
 		if stableIdentifier == frontierIdentifier {
 			delete(ap.managers, address)
 			log.Debug("no uncommitted changes")
 			continue
 		}
 
-		if err := ap.managers[address].Rebuild(ap.stable.GetStableAccountDB(address)); err != nil {
+		if err := ap.getAccountManager(address).Rebuild(ap.stable.GetStableAccountDB(address)); err != nil {
 			common.ChainLogger.Error("failed to rebuild account manager", "reason", err)
 		}
 
@@ -336,7 +339,7 @@ func (ap *accountPool) getUncommittedAccountBlocksByAddress(address types.Addres
 	stable := ap.getStableAccountStore(address)
 	frontier := ap.getFrontierAccountStore(address)
 	for i := stable.Identifier().Height + 1; i <= frontier.Identifier().Height; i += 1 {
-		block, err := ap.managers[address].BlockByHeight(i)
+		block, err := ap.getAccountManager(address).BlockByHeight(i)
 		common.DealWithErr(err)
 		blocks = append(blocks, block)
 	}
