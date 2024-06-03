@@ -3,6 +3,7 @@ package db
 import (
 	"fmt"
 	"math/rand"
+	"runtime"
 	"testing"
 
 	"github.com/zenon-network/go-zenon/common"
@@ -343,4 +344,42 @@ func TestPopWithPartitions(t *testing.T) {
 	db := withPartitions.Get(identifiers[200])
 	frontierIdentifier = GetFrontierIdentifier(db)
 	common.ExpectUint64(t, frontierIdentifier.Height, 200)
+}
+
+// Should be run with benchtime=1x to benchmark the performance
+// of uncached Get calls.
+func BenchmarkGetWithoutPartitions(b *testing.B) {
+	manager := NewLevelDBManager(b.TempDir(), false)
+	defer manager.Stop()
+
+	identifiers := applyMockTransactions(manager, 100000)
+
+	b.ResetTimer()
+
+	var dbs []DB
+	for i := 0; i < b.N; i++ {
+		for j := 1; j <= 10; j++ {
+			dbs = append(dbs, manager.Get(identifiers[j]))
+		}
+	}
+	runtime.KeepAlive(dbs)
+}
+
+// Should be run with benchtime=1x to benchmark the performance
+// of uncached Get calls.
+func BenchmarkGetWithPartitions(b *testing.B) {
+	manager := NewLevelDBManager(b.TempDir(), true)
+	defer manager.Stop()
+
+	identifiers := applyMockTransactions(manager, 100000)
+
+	b.ResetTimer()
+
+	var dbs []DB
+	for i := 0; i < b.N; i++ {
+		for j := 1; j <= 10; j++ {
+			dbs = append(dbs, manager.Get(identifiers[j]))
+		}
+	}
+	runtime.KeepAlive(dbs)
 }
