@@ -346,6 +346,37 @@ func TestPopWithPartitions(t *testing.T) {
 	common.ExpectUint64(t, frontierIdentifier.Height, 200)
 }
 
+func TestRestabilize(t *testing.T) {
+	stable := NewLevelDBManager(t.TempDir(), false)
+	defer stable.Stop()
+
+	rawDB := stable.Frontier()
+	frontierIdentifier := GetFrontierIdentifier(rawDB)
+	memdb := &memdbManager{
+		stableDB:           rawDB,
+		stableIdentifier:   frontierIdentifier,
+		frontierIdentifier: frontierIdentifier,
+		previous:           map[types.HashHeight]types.HashHeight{},
+		versions:           map[types.HashHeight]DB{frontierIdentifier: rawDB},
+		patches:            map[types.HashHeight]Patch{},
+	}
+	defer memdb.Stop()
+
+	applyMockTransactions(stable, 5)
+	applyMockTransactions(memdb, 10)
+
+	rawDB = stable.Frontier()
+	currentFrontierIdentifier := memdb.frontierIdentifier
+	memdb.Restabilize(rawDB)
+
+	common.ExpectString(t, DebugDB(memdb.stableDB), DebugDB(rawDB))
+	common.ExpectString(t, memdb.stableIdentifier.Hash.String(), GetFrontierIdentifier(rawDB).Hash.String())
+	common.ExpectString(t, memdb.frontierIdentifier.Hash.String(), currentFrontierIdentifier.Hash.String())
+	common.Expect(t, len(memdb.previous), 5)
+	common.Expect(t, len(memdb.patches), 5)
+	common.Expect(t, len(memdb.versions), 6)
+}
+
 // Should be run with benchtime=1x to benchmark the performance
 // of uncached Get calls.
 func BenchmarkGetWithoutPartitions(b *testing.B) {
