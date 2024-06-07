@@ -144,10 +144,6 @@ func (c *chain) checkArchiveCompatibility() error {
 		return nil
 	}
 	momentumStore := c.GetFrontierMomentumStore()
-	if archiveStore.Identifier().Height > momentumStore.Identifier().Height {
-		return errors.Errorf("The archive's state is incorrect. " +
-			"You can fix the problem by removing the archive database manually.")
-	}
 	genesisMomentum, err := momentumStore.GetMomentumByHeight(1)
 	if err != nil {
 		return err

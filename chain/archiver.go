@@ -133,7 +133,6 @@ func (a *archiver) GetArchiveStore(identifier types.HashHeight) store.Archive {
 }
 
 func (a *archiver) AddArchiveTransaction(insertLocker sync.Locker, momentumTransaction *nom.MomentumTransaction) error {
-	a.log.Info("inserting new momentum to archive", "identifier", momentumTransaction.Momentum.Identifier())
 	if insertLocker == nil {
 		return errors.Errorf("insertLocker can't be nil")
 	}
@@ -142,6 +141,14 @@ func (a *archiver) AddArchiveTransaction(insertLocker sync.Locker, momentumTrans
 	}
 	a.changes.Lock()
 	defer a.changes.Unlock()
+	if err := a.addTransaction(momentumTransaction); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (a *archiver) addTransaction(momentumTransaction *nom.MomentumTransaction) error {
+	a.log.Info("inserting new momentum to archive", "identifier", momentumTransaction.Momentum.Identifier())
 	m := momentumTransaction.Momentum
 	identifier := &archiveIdentifier{Height: m.Height, Hash: m.Hash, PreviousHash: m.PreviousHash}
 	extractor := &archiveExtractor{patch: db.NewPatch()}
@@ -156,13 +163,19 @@ func (a *archiver) AddArchiveTransaction(insertLocker sync.Locker, momentumTrans
 }
 
 func (a *archiver) RollbackArchiveTo(insertLocker sync.Locker, identifier types.HashHeight) error {
-	a.log.Info("rollbacking archive", "to-identifier", identifier)
 	if insertLocker == nil {
 		return errors.Errorf("insertLocker can't be nil")
 	}
 	a.changes.Lock()
 	defer a.changes.Unlock()
-	a.log.Info("preparing to rollback archive", "identifier", identifier)
+	if err := a.rollbackTo(identifier); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (a *archiver) rollbackTo(identifier types.HashHeight) error {
+	a.log.Info("rollbacking archive", "to-identifier", identifier)
 	store := a.getFrontierStore()
 	archiveIdentifier, err := store.GetIdentifierByHash(identifier.Hash)
 	if err != nil {
@@ -173,6 +186,7 @@ func (a *archiver) RollbackArchiveTo(insertLocker sync.Locker, identifier types.
 	}
 
 	for {
+		store := a.getFrontierStore()
 		frontier := store.Identifier()
 		if frontier.Height == identifier.Height {
 			break
@@ -192,13 +206,19 @@ func (a *archiver) Init(chainManager db.Manager, momentumStore store.Momentum) e
 	chainFrontier := db.GetFrontierIdentifier(chainManager.Frontier())
 	archiveFrontier := db.GetFrontierIdentifier(a.archiveManager.Frontier())
 
-	if archiveFrontier == chainFrontier {
+	if archiveFrontier.Height == chainFrontier.Height {
+		if archiveFrontier.Hash != chainFrontier.Hash {
+			return errors.Errorf("The archive's state is incorrect. " +
+				"You can fix the problem by removing the archive database manually.")
+		}
 		return nil
 	}
 
 	if archiveFrontier.Height > chainFrontier.Height {
-		return errors.Errorf("The archive's state is incorrect. " +
-			"You can fix the problem by removing the archive database manually.")
+		if err := a.rollbackTo(chainFrontier); err != nil {
+			return err
+		}
+		return nil
 	}
 
 	if chainFrontier.Height-archiveFrontier.Height >= 100000 {
@@ -211,13 +231,10 @@ func (a *archiver) Init(chainManager db.Manager, momentumStore store.Momentum) e
 			return err
 		}
 		changes := chainManager.GetPatch(momentum.Identifier())
-		extractor := &archiveExtractor{patch: db.NewPatch()}
-		if err := changes.Replay(extractor); err != nil {
-			return err
-		}
-		identifier := &archiveIdentifier{Height: momentum.Height, Hash: momentum.Hash, PreviousHash: momentum.PreviousHash}
-		transaction := &archiveTransaction{Identifier: identifier, Changes: extractor.patch}
-		if err := a.archiveManager.Add(transaction); err != nil {
+		if err := a.addTransaction(&nom.MomentumTransaction{
+			Momentum: momentum,
+			Changes:  changes,
+		}); err != nil {
 			return err
 		}
 		if i%100000 == 0 {
