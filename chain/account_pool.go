@@ -288,9 +288,8 @@ func (ap *accountPool) rebuild(detailed *nom.DetailedMomentum) error {
 		}
 
 		if err := ap.getAccountManager(address).Rebuild(ap.stable.GetStableAccountDB(address)); err != nil {
-			common.ChainLogger.Error("failed to rebuild account manager", "reason", err)
+			return errors.Errorf("account pool rebuild error. Unable to rebuild account manager for %v. Reason %v", address, err)
 		}
-
 	}
 
 	ap.log.Debug("finished rebuilding account-pool")
