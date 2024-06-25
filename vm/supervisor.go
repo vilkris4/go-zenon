@@ -54,9 +54,9 @@ func (s *Supervisor) newBlockContext(block *nom.AccountBlock) vm_context.Account
 
 func (s *Supervisor) newUserBlockContext(block *nom.AccountBlock) vm_context.AccountVmContext {
 	accountStore := s.chain.GetAccountStore(block.Address, block.Previous())
-	archiveStore := s.chain.GetArchiveStore(block.MomentumAcknowledged)
-	if archiveStore == nil {
-		panic(fmt.Sprintf("can't find archiveStore for %v", block.MomentumAcknowledged))
+	cacheStore := s.chain.GetCacheStore(block.MomentumAcknowledged)
+	if cacheStore == nil {
+		panic(fmt.Sprintf("can't find cacheStore for %v", block.MomentumAcknowledged))
 	}
 	if accountStore == nil {
 		panic(fmt.Sprintf("can't find accountStore for %v %v", block.Address, block.Previous()))
@@ -64,7 +64,7 @@ func (s *Supervisor) newUserBlockContext(block *nom.AccountBlock) vm_context.Acc
 	return vm_context.NewAccountContext(
 		nil,
 		accountStore,
-		archiveStore,
+		cacheStore,
 		nil,
 	)
 }

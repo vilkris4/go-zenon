@@ -18,8 +18,8 @@ type Config struct {
 	GenesisConfig     store.Genesis
 }
 
-func (c *Config) NewDBManager(inside string, usePartitions bool) db.Manager {
-	return db.NewLevelDBManager(path.Join(c.DataDir, inside), usePartitions)
+func (c *Config) NewDBManager(inside string) db.Manager {
+	return db.NewLevelDBManager(path.Join(c.DataDir, inside))
 }
 func (c *Config) NewLevelDB(inside string) (db.DB, *leveldb.DB) {
 	return db.NewLevelDB(path.Join(c.DataDir, inside))

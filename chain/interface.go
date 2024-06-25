@@ -23,7 +23,7 @@ type Chain interface {
 	AccountPool
 	MomentumPool
 	MomentumEventManager
-	Archiver
+	ChainCache
 }
 
 type MomentumEventListener interface {
@@ -65,10 +65,9 @@ type AccountPool interface {
 	GetUncommittedAccountBlocksByAddress(address types.Address) []*nom.AccountBlock
 }
 
-type Archiver interface {
-	AddArchiveTransaction(insertLocker sync.Locker, transaction *nom.MomentumTransaction) error
-	RollbackArchiveTo(insertLocker sync.Locker, identifier types.HashHeight) error
-
-	GetFrontierArchiveStore() store.Archive
-	GetArchiveStore(identifier types.HashHeight) store.Archive
+type ChainCache interface {
+	UpdateCache(insertLocker sync.Locker, detailed *nom.DetailedMomentum, changes db.Patch) error
+	RollbackCacheTo(insertLocker sync.Locker, identifier types.HashHeight) error
+	GetCacheStore(identifier types.HashHeight) store.Cache
+	GetFrontierCacheStore() store.Cache
 }

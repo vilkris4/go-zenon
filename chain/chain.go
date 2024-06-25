@@ -7,6 +7,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/zenon-network/go-zenon/chain/cache/storage"
 	"github.com/zenon-network/go-zenon/chain/store"
 	"github.com/zenon-network/go-zenon/common"
 	"github.com/zenon-network/go-zenon/common/db"
@@ -24,25 +25,25 @@ type chain struct {
 	*accountPool
 	*momentumPool
 	*momentumEventManager
-	*archiver
+	*chainCache
 
-	chainManager   db.Manager
-	archiveManager db.Manager
-	insert         sync.Mutex
+	chainManager db.Manager
+	cacheDB      storage.CacheDB
+	insert       sync.Mutex
 }
 
-func NewChain(chainManager db.Manager, archiveManager db.Manager, genesis store.Genesis) *chain {
+func NewChain(chainManager db.Manager, cacheDB storage.CacheDB, genesis store.Genesis) *chain {
 	momentumPool := NewMomentumPool(chainManager, genesis)
-	archiver := NewArchiver(archiveManager)
+	cache := NewChainCache(cacheDB)
 	return &chain{
 		log:                  common.ChainLogger,
 		Genesis:              genesis,
 		accountPool:          newAccountPool(momentumPool),
 		momentumPool:         momentumPool,
 		momentumEventManager: momentumPool.momentumEventManager,
-		archiver:             archiver,
+		chainCache:           cache,
 		chainManager:         chainManager,
-		archiveManager:       archiveManager,
+		cacheDB:              cacheDB,
 	}
 }
 
@@ -65,10 +66,7 @@ func (c *chain) Init() error {
 		return err
 	}
 
-	if err := c.checkArchiveCompatibility(); err != nil {
-		return err
-	}
-	if err := c.archiver.Init(c.chainManager, frontierStore); err != nil {
+	if err := c.chainCache.Init(c.chainManager, frontierStore); err != nil {
 		return err
 	}
 
@@ -107,7 +105,7 @@ func (c *chain) Stop() error {
 
 	c.UnRegister(c.accountPool)
 
-	if err := c.archiveManager.Stop(); err != nil {
+	if err := c.cacheDB.Stop(); err != nil {
 		return err
 	}
 
@@ -134,27 +132,6 @@ func (c *chain) checkGenesisCompatibility() error {
 				"You can fix the problem by removing the database manually.")
 		}
 		c.log.Info("found momentums in DB. genesis-hash matches")
-	}
-	return nil
-}
-
-func (c *chain) checkArchiveCompatibility() error {
-	archiveStore := c.GetFrontierArchiveStore()
-	if archiveStore.Identifier().IsZero() {
-		return nil
-	}
-	momentumStore := c.GetFrontierMomentumStore()
-	genesisMomentum, err := momentumStore.GetMomentumByHeight(1)
-	if err != nil {
-		return err
-	}
-	archiveGenesis, err := archiveStore.GetIdentifierByHash(genesisMomentum.Hash)
-	if err != nil {
-		return err
-	}
-	if archiveGenesis.Height != 1 {
-		return errors.Errorf("The archive's state is incorrect. " +
-			"You can fix the problem by removing the archive database manually.")
 	}
 	return nil
 }

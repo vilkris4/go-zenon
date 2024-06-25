@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/zenon-network/go-zenon/chain"
+	"github.com/zenon-network/go-zenon/chain/cache/storage"
 	"github.com/zenon-network/go-zenon/chain/genesis"
 	g "github.com/zenon-network/go-zenon/chain/genesis/mock"
 	"github.com/zenon-network/go-zenon/chain/nom"
@@ -141,12 +142,12 @@ func (zenon *mockZenon) SyncInfo() *protocol.SyncInfo {
 func (zenon *mockZenon) SyncState() protocol.SyncState {
 	return protocol.SyncDone
 }
-func (zenon *mockZenon) CreateMomentum(momentumTransaction *nom.MomentumTransaction) {
+func (zenon *mockZenon) CreateMomentum(momentumTransaction *nom.MomentumTransaction, detailed *nom.DetailedMomentum) {
 	insert := zenon.chain.AcquireInsert("mock-zenon create-momentum")
 	defer insert.Unlock()
-	err := zenon.chain.AddArchiveTransaction(insert, momentumTransaction)
+	err := zenon.chain.UpdateCache(insert, detailed, momentumTransaction.Changes)
 	if err != nil {
-		panic(fmt.Errorf("failed to insert own momentum to archive. reason:%w", err))
+		panic(fmt.Errorf("failed to insert own momentum to chain cache. reason:%w", err))
 	}
 	err = zenon.chain.AddMomentumTransaction(insert, momentumTransaction)
 	if err != nil {
@@ -279,8 +280,8 @@ func (zenon *mockZenon) ExpectBalance(address types.Address, standard types.Zeno
 	}
 	common.ExpectAmount(zenon.t, amount, big.NewInt(expected))
 }
-func (zenon *mockZenon) ExpectArchiveFusedAmount(address types.Address, expected int64) {
-	amount, err := zenon.chain.GetFrontierArchiveStore().GetStakeBeneficialAmount(address)
+func (zenon *mockZenon) ExpectCacheFusedAmount(address types.Address, expected int64) {
+	amount, err := zenon.chain.GetFrontierCacheStore().GetFusedPlasma(address)
 	common.FailIfErr(zenon.t, err)
 	if amount == nil {
 		amount = big.NewInt(0)
@@ -365,7 +366,7 @@ func newMockZenon(t common.T, customEpochDuration time.Duration) MockZenon {
 	common.SupervisorLogger.SetHandler(log15.LvlFilterHandler(log15.LvlError, log15.StderrHandler))
 	consensus.EpochDuration = customEpochDuration
 
-	ch := chain.NewChain(db.NewLevelDBManager(t.TempDir(), false), db.NewLevelDBManager(t.TempDir(), true), genesis.NewGenesis(g.EmbeddedGenesis))
+	ch := chain.NewChain(db.NewLevelDBManager(t.TempDir()), storage.NewCacheDB(db.NewLevelDB(t.TempDir())), genesis.NewGenesis(g.EmbeddedGenesis))
 	cs := consensus.NewConsensus(db.NewMemDB(), ch, true)
 	supervisor := vm.NewSupervisor(ch, cs)
 	zenon := &mockZenon{

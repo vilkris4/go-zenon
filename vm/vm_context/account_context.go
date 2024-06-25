@@ -13,22 +13,22 @@ type accountVmContext struct {
 	api.PillarReader
 	store.Account
 	momentumStore store.Momentum
-	archiveStore  store.Archive
+	cacheStore    store.Cache
 }
 
 func (ctx *accountVmContext) MomentumStore() store.Momentum {
 	return ctx.momentumStore
 }
 
-func (ctx *accountVmContext) ArchiveStore() store.Archive {
-	return ctx.archiveStore
+func (ctx *accountVmContext) CacheStore() store.Cache {
+	return ctx.cacheStore
 }
 
-func NewAccountContext(momentumStore store.Momentum, accountBlock store.Account, archiveStore store.Archive, pillarReader api.PillarReader) AccountVmContext {
+func NewAccountContext(momentumStore store.Momentum, accountBlock store.Account, cacheStore store.Cache, pillarReader api.PillarReader) AccountVmContext {
 	return &accountVmContext{
 		momentumStore: momentumStore,
 		Account:       accountBlock,
-		archiveStore:  archiveStore,
+		cacheStore:    cacheStore,
 		PillarReader:  pillarReader,
 	}
 }

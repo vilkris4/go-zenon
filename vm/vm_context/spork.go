@@ -6,8 +6,8 @@ import (
 )
 
 func (ctx *accountVmContext) IsAcceleratorSporkEnforced() bool {
-	if ctx.archiveStore != nil {
-		active, err := ctx.archiveStore.IsSporkActive(types.AcceleratorSpork)
+	if ctx.cacheStore != nil {
+		active, err := ctx.cacheStore.IsSporkActive(types.AcceleratorSpork)
 		common.DealWithErr(err)
 		return active
 	} else {
@@ -18,8 +18,8 @@ func (ctx *accountVmContext) IsAcceleratorSporkEnforced() bool {
 }
 
 func (ctx *accountVmContext) IsHtlcSporkEnforced() bool {
-	if ctx.archiveStore != nil {
-		active, err := ctx.archiveStore.IsSporkActive(types.HtlcSpork)
+	if ctx.cacheStore != nil {
+		active, err := ctx.cacheStore.IsSporkActive(types.HtlcSpork)
 		common.DealWithErr(err)
 		return active
 	} else {
@@ -30,8 +30,8 @@ func (ctx *accountVmContext) IsHtlcSporkEnforced() bool {
 }
 
 func (ctx *accountVmContext) IsBridgeAndLiquiditySporkEnforced() bool {
-	if ctx.archiveStore != nil {
-		active, err := ctx.archiveStore.IsSporkActive(types.BridgeAndLiquiditySpork)
+	if ctx.cacheStore != nil {
+		active, err := ctx.cacheStore.IsSporkActive(types.BridgeAndLiquiditySpork)
 		common.DealWithErr(err)
 		return active
 	} else {

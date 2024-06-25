@@ -1,6 +1,7 @@
 package pillar
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -92,9 +93,12 @@ func (w *worker) Process(e consensus.ProducerEvent) common.Task {
 
 func (w *worker) work(task common.TaskResolver, e consensus.ProducerEvent) {
 	var momentumStore store.Momentum
+	startTime := time.Now()
 
 	w.log.Info("producing momentum", "event", e)
-	momentum, err := w.generateMomentum(e)
+	transaction, detailed, err := w.generateMomentum(e)
+	fmt.Printf("get momentum data %d, took %s\n", detailed.Momentum.Height, time.Since(startTime))
+
 	if err != nil {
 		w.log.Error("failed to generate momentum", "reason", err)
 		return
@@ -107,10 +111,10 @@ func (w *worker) work(task common.TaskResolver, e consensus.ProducerEvent) {
 		return
 	}
 	if common.Clock.Now().After(e.StartTime.Add(3 * time.Second)) {
-		w.log.Error("do not broadcast own momentum", "identifier", momentum.Momentum.Identifier(), "reason", "too-late")
+		w.log.Error("do not broadcast own momentum", "identifier", transaction.Momentum.Identifier(), "reason", "too-late")
 	} else {
-		w.log.Info("broadcasting own momentum", "identifier", momentum.Momentum.Identifier())
-		w.broadcaster.CreateMomentum(momentum)
+		w.log.Info("broadcasting own momentum", "identifier", transaction.Momentum.Identifier())
+		w.broadcaster.CreateMomentum(transaction, detailed)
 	}
 
 	if task.ShouldStop() {
@@ -155,6 +159,8 @@ func (w *worker) work(task common.TaskResolver, e consensus.ProducerEvent) {
 	if w.shouldStop() {
 		return
 	}
+	fmt.Printf("generated momentum %d, took %s\n", detailed.Momentum.Height, time.Since(startTime))
+	fmt.Println("---------")
 	w.log.Info("checking if can update contracts")
 	momentumStore = w.chain.GetFrontierMomentumStore()
 	if err := w.updateContracts(momentumStore); err != nil {

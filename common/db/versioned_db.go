@@ -20,10 +20,9 @@ const (
 )
 
 var (
-	frontierByte  = []byte{85}
-	patchByte     = []byte{102}
-	rollbackByte  = []byte{119}
-	partitionByte = []byte{136}
+	frontierByte = []byte{85}
+	patchByte    = []byte{102}
+	rollbackByte = []byte{119}
 )
 
 func absDiff(x, y uint64) uint64 {
@@ -181,22 +180,20 @@ func (m *memdbManager) Location() string {
 }
 
 type rollbackCache struct {
-	frontierHeight uint64
-	raw            db
-	isPartitioned  bool
+	frontier types.HashHeight
+	raw      db
 }
 
 type ldbManager struct {
-	location      string
-	usePartitions bool
-	l1Cache       *lru.Cache
-	l2Cache       *lru.Cache
-	ldb           *leveldb.DB
-	changes       sync.Mutex
-	stopped       bool
+	location string
+	l1Cache  *lru.Cache
+	l2Cache  *lru.Cache
+	ldb      *leveldb.DB
+	changes  sync.Mutex
+	stopped  bool
 }
 
-func NewLevelDBManager(dir string, usePartitions bool) Manager {
+func NewLevelDBManager(dir string) Manager {
 	opts := &opt.Options{OpenFilesCacheCapacity: getOpenFilesCacheCapacity()}
 	ldb, err := leveldb.OpenFile(dir, opts)
 	common.DealWithErr(err)
@@ -205,11 +202,10 @@ func NewLevelDBManager(dir string, usePartitions bool) Manager {
 	l2Cache, err := lru.New(l2CacheSize)
 	common.DealWithErr(err)
 	return &ldbManager{
-		location:      dir,
-		usePartitions: usePartitions,
-		l1Cache:       l1Cache,
-		l2Cache:       l2Cache,
-		ldb:           ldb,
+		location: dir,
+		l1Cache:  l1Cache,
+		l2Cache:  l2Cache,
+		ldb:      ldb,
 	}
 }
 
@@ -222,7 +218,6 @@ func (m *ldbManager) Frontier() DB {
 	snapshot, _ := m.ldb.GetSnapshot()
 	return NewLevelDBSnapshotWrapper(snapshot).Subset(frontierByte)
 }
-
 func (m *ldbManager) Get(identifier types.HashHeight) DB {
 	m.changes.Lock()
 	defer m.changes.Unlock()
@@ -251,84 +246,48 @@ func (m *ldbManager) Get(identifier types.HashHeight) DB {
 	}
 
 	var rawChanges db
-	var cacheFrontierHeight uint64
-	var usePartitions bool
-	var hasCache bool
-	var dbs []db
+	var toIdentifier types.HashHeight
 
 	if cache, ok := m.l1Cache.Get(identifier); ok {
-		cacheFrontierHeight = cache.(*rollbackCache).frontierHeight
+		toIdentifier = cache.(*rollbackCache).frontier
 		rawChanges = cache.(*rollbackCache).raw
-		usePartitions = cache.(*rollbackCache).isPartitioned
-		hasCache = true
 	} else if cache, ok := m.l2Cache.Get(identifier); ok {
-		cacheFrontierHeight = cache.(*rollbackCache).frontierHeight
+		toIdentifier = cache.(*rollbackCache).frontier
 		rawChanges = cache.(*rollbackCache).raw
-		usePartitions = cache.(*rollbackCache).isPartitioned
-		hasCache = true
 	} else {
-		distanceToFrontier := absDiff(identifier.Height, frontierIdentifier.Height)
 		rawChanges = newMemDBInternal()
-		usePartitions = distanceToFrontier > GetConfigForSmallestPartition().size && m.hasPartitions(frontierIdentifier)
-		hasCache = false
+		toIdentifier = identifier
 	}
 
-	if usePartitions {
-		if !hasCache {
-			endHeight := GetPartitionsEndHeight(identifier.Height)
-			if endHeight > frontierIdentifier.Height {
-				endHeight = frontierIdentifier.Height
-			}
-			m.applyRollbacks(rawChanges, identifier.Height+1, endHeight)
-			cacheFrontierHeight = endHeight
+	for i := toIdentifier.Height + 1; i <= frontierIdentifier.Height; i += 1 {
+		rollback := m.getRollback(i)
+		if err := ApplyWithoutOverride(rawChanges, rollback); err != nil {
+			common.DealWithErr(err)
 		}
-		dbs = append(dbs, rawChanges)
-		dbs = append(dbs, GetPartitions(newSubDB(partitionByte, newLevelDBSnapshotWrapper(snapshot)), identifier.Height)...)
-	} else {
-		startHeight := identifier.Height + 1
-		if hasCache {
-			startHeight = cacheFrontierHeight + 1
-		}
-		m.applyRollbacks(rawChanges, startHeight, frontierIdentifier.Height)
-		cacheFrontierHeight = frontierIdentifier.Height
-		dbs = append(dbs, rawChanges)
-		dbs = append(dbs, newSubDB(frontierByte, newLevelDBSnapshotWrapper(snapshot)))
 	}
 
 	if absDiff(identifier.Height, frontierIdentifier.Height) < maximumCacheHeightDifference {
 		m.l1Cache.Add(identifier, &rollbackCache{
-			frontierHeight: cacheFrontierHeight,
-			raw:            rawChanges,
-			isPartitioned:  usePartitions,
+			frontier: frontierIdentifier,
+			raw:      rawChanges,
 		})
 	} else {
 		m.l2Cache.Add(identifier, &rollbackCache{
-			frontierHeight: cacheFrontierHeight,
-			raw:            rawChanges,
-			isPartitioned:  usePartitions,
+			frontier: frontierIdentifier,
+			raw:      rawChanges,
 		})
 	}
 
 	u := newMergedDb([]db{
 		newMemDBInternal(),
-		newSkipDelete(newMergedDb(dbs)),
+		newSkipDelete(
+			newMergedDb([]db{
+				rawChanges,
+				newSubDB(frontierByte, newLevelDBSnapshotWrapper(snapshot)),
+			})),
 	})
-	return enableDelete(u)
+	return enableDelete(u, false)
 }
-
-func (m *ldbManager) applyRollbacks(db db, startHeight uint64, endHeight uint64) {
-	for i := startHeight; i <= endHeight; i += 1 {
-		rollback := m.getRollback(i)
-		if err := ApplyWithoutOverride(db, rollback); err != nil {
-			common.DealWithErr(err)
-		}
-	}
-}
-
-func (m *ldbManager) hasPartitions(frontier types.HashHeight) bool {
-	return m.usePartitions && GetPartitionsFrontierHeight(NewLevelDBWrapper(m.ldb).Subset(partitionByte)) == frontier.Height
-}
-
 func (m *ldbManager) GetPatch(identifier types.HashHeight) Patch {
 	m.changes.Lock()
 	defer m.changes.Unlock()
@@ -411,11 +370,6 @@ func (m *ldbManager) Add(transaction Transaction) error {
 		if err := ApplyPatch(NewLevelDBWrapper(m.ldb).Subset(frontierByte), patch); err != nil {
 			return err
 		}
-		if m.usePartitions {
-			if err := ApplyPatchToPartitions(NewLevelDBWrapper(m.ldb).Subset(partitionByte), patch, identifier.Height, false); err != nil {
-				return err
-			}
-		}
 	}
 	return nil
 }
@@ -432,11 +386,7 @@ func (m *ldbManager) Pop() error {
 	if err := m.ldb.Delete(common.JoinBytes(rollbackByte, common.Uint64ToBytes(frontierIdentifier.Height)), nil); err != nil {
 		return err
 	}
-	if m.usePartitions {
-		if err := ApplyPatchToPartitions(NewLevelDBWrapper(m.ldb).Subset(partitionByte), rollbackPatch, frontierIdentifier.Height, true); err != nil {
-			return err
-		}
-	}
+
 	return nil
 }
 func (m *ldbManager) Stop() error {

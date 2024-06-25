@@ -56,7 +56,7 @@ func enoughPlasma(context vm_context.AccountVmContext, block *nom.AccountBlock) 
 	// Prevent potentially expensive database read operations by only
 	// checking available plasma for blocks with fused plasma
 	if block.FusedPlasma > 0 {
-		available, err := AvailablePlasma(context.ArchiveStore(), context)
+		available, err := AvailablePlasma(context.CacheStore(), context)
 		common.DealWithErr(err)
 		if available < block.FusedPlasma {
 			return constants.ErrNotEnoughPlasma

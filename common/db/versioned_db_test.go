@@ -3,7 +3,6 @@ package db
 import (
 	"fmt"
 	"math/rand"
-	"runtime"
 	"testing"
 
 	"github.com/zenon-network/go-zenon/common"
@@ -66,20 +65,8 @@ func newMockTransaction(seed int64, db DB) *mockTransaction {
 	}
 }
 
-func applyMockTransactions(m Manager, amount int) map[int]types.HashHeight {
-	identifiers := make(map[int]types.HashHeight, amount)
-	for i := 1; i <= amount; i++ {
-		t := newMockTransaction(int64(i), m.Frontier())
-		common.DealWithErr(m.Add(t))
-		identifiers[i] = t.commit.Identifier()
-	}
-	return identifiers
-}
-
 func TestVersionedDBConcurrentUse(t *testing.T) {
-	m := NewLevelDBManager(t.TempDir(), false)
-	defer m.Stop()
-
+	m := NewLevelDBManager(t.TempDir())
 	v0 := m.Frontier()
 	v01 := m.Frontier()
 
@@ -118,7 +105,7 @@ e871bc355914f2c3 - 48c39064a7c7e355`)
 
 func TestVersionedDBVersions(t *testing.T) {
 	dir := t.TempDir()
-	m := NewLevelDBManager(dir, false)
+	m := NewLevelDBManager(dir)
 
 	db := m.Frontier()
 	t1 := newMockTransaction(1, db)
@@ -247,8 +234,7 @@ dc2864602be7fb85 - d38967f931a50490
 f25f4b21eef64b43 - 9c0a8a2bfc0914df`)
 
 	common.FailIfErr(t, m.Stop())
-	m2 := NewLevelDBManager(dir, false)
-	defer m2.Stop()
+	m2 := NewLevelDBManager(dir)
 	db = m2.Frontier()
 	common.ExpectString(t, DebugDB(db), `
 00 - 0a220a20d8ba48392cd7843812028c9fc3d7c92e232b8a725db741d69c930772e8551a851003
@@ -273,113 +259,4 @@ cea06b688be116ca - f6bd65cefe8c20dc
 d5104dc76695721d - b80704bb7b4d7c03
 dc2864602be7fb85 - d38967f931a50490
 f25f4b21eef64b43 - 9c0a8a2bfc0914df`)
-}
-
-func TestComparePartitionsToNoPartitions(t *testing.T) {
-	withPartitions := NewLevelDBManager(t.TempDir(), true)
-	defer withPartitions.Stop()
-	withoutPartitions := NewLevelDBManager(t.TempDir(), false)
-	defer withoutPartitions.Stop()
-	partitionConfigs = []partitionConfig{
-		{size: uint64(10), prefix: []byte{1}},
-		{size: uint64(100), prefix: []byte{2}},
-		{size: uint64(1000), prefix: []byte{3}},
-	}
-
-	identifiers := applyMockTransactions(withPartitions, 2000)
-	applyMockTransactions(withoutPartitions, 2000)
-
-	db1 := withPartitions.Get(identifiers[2000])
-	db2 := withoutPartitions.Get(identifiers[2000])
-	common.ExpectString(t, DebugDB(db1), DebugDB(db2))
-
-	db1 = withPartitions.Get(identifiers[1999])
-	db2 = withoutPartitions.Get(identifiers[1999])
-	common.ExpectString(t, DebugDB(db1), DebugDB(db2))
-
-	db1 = withPartitions.Get(identifiers[1500])
-	db2 = withoutPartitions.Get(identifiers[1500])
-	common.ExpectString(t, DebugDB(db1), DebugDB(db2))
-
-	db1 = withPartitions.Get(identifiers[986])
-	db2 = withoutPartitions.Get(identifiers[986])
-	common.ExpectString(t, DebugDB(db1), DebugDB(db2))
-
-	db1 = withPartitions.Get(identifiers[599])
-	db2 = withoutPartitions.Get(identifiers[599])
-	common.ExpectString(t, DebugDB(db1), DebugDB(db2))
-
-	db1 = withPartitions.Get(identifiers[80])
-	db2 = withoutPartitions.Get(identifiers[80])
-	common.ExpectString(t, DebugDB(db1), DebugDB(db2))
-
-	db1 = withPartitions.Get(identifiers[9])
-	db2 = withoutPartitions.Get(identifiers[9])
-	common.ExpectString(t, DebugDB(db1), DebugDB(db2))
-
-	db1 = withPartitions.Get(identifiers[1])
-	db2 = withoutPartitions.Get(identifiers[1])
-	common.ExpectString(t, DebugDB(db1), DebugDB(db2))
-}
-
-func TestPopWithPartitions(t *testing.T) {
-	withPartitions := NewLevelDBManager(t.TempDir(), true)
-	defer withPartitions.Stop()
-	partitionConfigs = []partitionConfig{
-		{size: uint64(10), prefix: []byte{1}},
-		{size: uint64(100), prefix: []byte{2}},
-		{size: uint64(1000), prefix: []byte{3}},
-	}
-
-	identifiers := applyMockTransactions(withPartitions, 1000)
-
-	for i := 1000; i > 550; i-- {
-		err := withPartitions.Pop()
-		common.DealWithErr(err)
-	}
-
-	frontierIdentifier := GetFrontierIdentifier(withPartitions.Frontier())
-	common.ExpectUint64(t, frontierIdentifier.Height, 550)
-
-	db := withPartitions.Get(identifiers[200])
-	frontierIdentifier = GetFrontierIdentifier(db)
-	common.ExpectUint64(t, frontierIdentifier.Height, 200)
-}
-
-// Should be run with benchtime=1x to benchmark the performance
-// of uncached Get calls.
-func BenchmarkGetWithoutPartitions(b *testing.B) {
-	manager := NewLevelDBManager(b.TempDir(), false)
-	defer manager.Stop()
-
-	identifiers := applyMockTransactions(manager, 100000)
-
-	b.ResetTimer()
-
-	var dbs []DB
-	for i := 0; i < b.N; i++ {
-		for j := 1; j <= 10; j++ {
-			dbs = append(dbs, manager.Get(identifiers[j]))
-		}
-	}
-	runtime.KeepAlive(dbs)
-}
-
-// Should be run with benchtime=1x to benchmark the performance
-// of uncached Get calls.
-func BenchmarkGetWithPartitions(b *testing.B) {
-	manager := NewLevelDBManager(b.TempDir(), true)
-	defer manager.Stop()
-
-	identifiers := applyMockTransactions(manager, 100000)
-
-	b.ResetTimer()
-
-	var dbs []DB
-	for i := 0; i < b.N; i++ {
-		for j := 1; j <= 10; j++ {
-			dbs = append(dbs, manager.Get(identifiers[j]))
-		}
-	}
-	runtime.KeepAlive(dbs)
 }

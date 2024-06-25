@@ -31,7 +31,7 @@ type accountVerifier struct {
 	consensus consensus.Consensus
 }
 
-func (av *accountVerifier) getContext(block *nom.AccountBlock) (store.Account, store.Momentum, store.Archive, error) {
+func (av *accountVerifier) getContext(block *nom.AccountBlock) (store.Account, store.Momentum, store.Cache, error) {
 	if block.Height == 0 {
 		return nil, nil, nil, ErrABMHeightMissing
 	}
@@ -47,15 +47,15 @@ func (av *accountVerifier) getContext(block *nom.AccountBlock) (store.Account, s
 	}
 
 	var momentumStore store.Momentum
-	var archiveStore store.Archive
+	var cacheStore store.Cache
 	if types.IsEmbeddedAddress(block.Address) {
 		momentumStore = av.chain.GetMomentumStore(block.MomentumAcknowledged)
 		if momentumStore == nil {
 			return nil, nil, nil, ErrABMAMissing
 		}
 	} else {
-		archiveStore = av.chain.GetArchiveStore(block.MomentumAcknowledged)
-		if archiveStore == nil {
+		cacheStore = av.chain.GetCacheStore(block.MomentumAcknowledged)
+		if cacheStore == nil {
 			return nil, nil, nil, ErrABMAMissing
 		}
 	}
@@ -84,14 +84,14 @@ func (av *accountVerifier) getContext(block *nom.AccountBlock) (store.Account, s
 		}
 	}
 
-	return accountStore, momentumStore, archiveStore, nil
+	return accountStore, momentumStore, cacheStore, nil
 }
 func (av *accountVerifier) AccountBlock(block *nom.AccountBlock) error {
 	if block.BlockType == nom.BlockTypeContractSend {
 		return ErrABTypeInvalidExternal
 	}
 
-	accountStore, momentumStore, archiveStore, err := av.getContext(block)
+	accountStore, momentumStore, cacheStore, err := av.getContext(block)
 	if err != nil {
 		return err
 	}
@@ -100,7 +100,7 @@ func (av *accountVerifier) AccountBlock(block *nom.AccountBlock) error {
 		block:         block,
 		accountStore:  accountStore,
 		momentumStore: momentumStore,
-		archiveStore:  archiveStore,
+		cacheStore:    cacheStore,
 		frontierStore: av.chain.GetFrontierMomentumStore(),
 	}).all()
 }
@@ -133,7 +133,7 @@ type accountBlockVerifier struct {
 	block         *nom.AccountBlock
 	accountStore  store.Account
 	momentumStore store.Momentum
-	archiveStore  store.Archive
+	cacheStore    store.Cache
 	frontierStore store.Momentum
 }
 
@@ -289,19 +289,19 @@ func (abv *accountBlockVerifier) previous() error {
 	return nil
 }
 func (abv *accountBlockVerifier) momentumAcknowledged() error {
-	var contextFrontier types.HashHeight
-	if abv.archiveStore != nil {
-		contextFrontier = abv.archiveStore.Identifier()
+	var storeIdentifier types.HashHeight
+	if abv.cacheStore != nil {
+		storeIdentifier = abv.cacheStore.Identifier()
 	} else {
 		momentum, err := abv.momentumStore.GetFrontierMomentum()
 		if err != nil {
 			return InternalError(err)
 		}
-		contextFrontier = momentum.Identifier()
+		storeIdentifier = momentum.Identifier()
 	}
 
-	if contextFrontier != abv.block.MomentumAcknowledged {
-		return InternalError(errors.Errorf("impossible scenario. verifier store exists but frontier is different. Expected MomentumAcknowledged %v but got %v from verifier store", abv.block.MomentumAcknowledged, contextFrontier))
+	if storeIdentifier != abv.block.MomentumAcknowledged {
+		return InternalError(errors.Errorf("impossible scenario. verifier store exists but frontier is different. Expected MomentumAcknowledged %v but got %v from verifier store", abv.block.MomentumAcknowledged, storeIdentifier))
 	}
 
 	// all checks are done by the parent

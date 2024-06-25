@@ -53,6 +53,7 @@ type db interface {
 	Get([]byte) ([]byte, error)
 	Has([]byte) (bool, error)
 	Put(key, value []byte) error
+	Delete(key []byte) error
 
 	NewIterator(prefix []byte) StorageIterator
 

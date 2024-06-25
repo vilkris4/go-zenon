@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/pkg/errors"
 
@@ -172,19 +173,20 @@ func (c chainBridge) InsertChain(momentums []*nom.DetailedMomentum) (int, error)
 			return 0, errors.Errorf("won't insert side-chain which is not longer")
 		}
 
-		err = c.chain.RollbackArchiveTo(insert, target.Identifier())
-		if err != nil {
-			return 0, errors.Errorf("unable to rollback archive to %v. Reason:%v", target.Identifier(), err)
-		}
-
 		err = c.chain.RollbackTo(insert, target.Identifier())
 		if err != nil {
 			return 0, errors.Errorf("unable to rollback to %v. Reason:%v", target.Identifier(), err)
+		}
+
+		err = c.chain.RollbackCacheTo(insert, target.Identifier())
+		if err != nil {
+			return 0, errors.Errorf("unable to rollback cache to %v. Reason:%v", target.Identifier(), err)
 		}
 	}
 
 	// Insert momentum now
 	for index, detailed := range momentums {
+		startTime := time.Now()
 		for _, block := range detailed.AccountBlocks {
 			if block.BlockType == nom.BlockTypeContractSend {
 				continue
@@ -208,14 +210,18 @@ func (c chainBridge) InsertChain(momentums []*nom.DetailedMomentum) (int, error)
 		if err != nil {
 			return index + start, err
 		}
-		if err := c.chain.AddArchiveTransaction(insert, transaction); err != nil {
-			log.Error("error while inserting archive", "reason", err, "momentum-identifier", detailed.Momentum.Identifier())
+		startTime2 := time.Now()
+		if err := c.chain.UpdateCache(insert, detailed, transaction.Changes); err != nil {
+			log.Error("error while inserting cache", "reason", err, "momentum-identifier", detailed.Momentum.Identifier())
 			return index + start, err
 		}
+		fmt.Printf("inserted momentum to cache (txs %d), took %s\n", len(detailed.AccountBlocks), time.Since(startTime2))
 		if err := c.chain.AddMomentumTransaction(insert, transaction); err != nil {
 			log.Error("error while inserting momentum", "reason", err, "momentum-identifier", detailed.Momentum.Identifier())
 			return index + start, err
 		}
+		fmt.Printf("inserted momentum %d, took %s\n", detailed.Momentum.Height, time.Since(startTime))
+		fmt.Println("---------")
 	}
 
 	return 0, nil
