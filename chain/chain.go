@@ -28,13 +28,13 @@ type chain struct {
 	*chainCache
 
 	chainManager db.Manager
-	cacheDB      storage.CacheDB
+	cacheManager storage.CacheManager
 	insert       sync.Mutex
 }
 
-func NewChain(chainManager db.Manager, cacheDB storage.CacheDB, genesis store.Genesis) *chain {
+func NewChain(chainManager db.Manager, cacheManager storage.CacheManager, genesis store.Genesis) *chain {
 	momentumPool := NewMomentumPool(chainManager, genesis)
-	cache := NewChainCache(cacheDB)
+	cache := NewChainCache(cacheManager)
 	return &chain{
 		log:                  common.ChainLogger,
 		Genesis:              genesis,
@@ -43,7 +43,7 @@ func NewChain(chainManager db.Manager, cacheDB storage.CacheDB, genesis store.Ge
 		momentumEventManager: momentumPool.momentumEventManager,
 		chainCache:           cache,
 		chainManager:         chainManager,
-		cacheDB:              cacheDB,
+		cacheManager:         cacheManager,
 	}
 }
 
@@ -105,7 +105,7 @@ func (c *chain) Stop() error {
 
 	c.UnRegister(c.accountPool)
 
-	if err := c.cacheDB.Stop(); err != nil {
+	if err := c.cacheManager.Stop(); err != nil {
 		return err
 	}
 

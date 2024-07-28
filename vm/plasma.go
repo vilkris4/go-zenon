@@ -60,7 +60,7 @@ func AvailablePlasma(cache store.Cache, account store.Account) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	fused, err := cache.GetFusedPlasma(address)
+	fused, err := cache.GetStakeBeneficialAmount(address)
 	if err != nil {
 		return 0, err
 	}

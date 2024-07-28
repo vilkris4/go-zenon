@@ -97,6 +97,12 @@ func newMergedIterator(iterators []StorageIterator) StorageIterator {
 func (mi *mergedIterator) Next() bool {
 	return mi.step()
 }
+func (mi *mergedIterator) Prev() bool {
+	panic("unimplemented")
+}
+func (mi *mergedIterator) Last() bool {
+	panic("unimplemented")
+}
 func (mi *mergedIterator) Key() []byte {
 	if mi.current == noCurrent || mi.err != nil {
 		return nil

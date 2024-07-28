@@ -1,9 +1,13 @@
 package storage
 
 import (
+	"path"
+	"runtime"
 	"sync"
 
 	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/opt"
+	"github.com/syndtr/goleveldb/leveldb/util"
 	"github.com/zenon-network/go-zenon/common"
 	"github.com/zenon-network/go-zenon/common/db"
 	"github.com/zenon-network/go-zenon/common/types"
@@ -18,8 +22,19 @@ var (
 	rollbackByte = []byte{119}
 )
 
-type CacheDB interface {
-	Get() db.DB
+func getConsensusOpenFilesCacheCapacity() int {
+	switch runtime.GOOS {
+	case "darwin":
+		return 20
+	case "windows":
+		return 200
+	default:
+		return 200
+	}
+}
+
+type CacheManager interface {
+	DB() db.DB
 
 	Add(types.HashHeight, db.Patch) error
 	Pop() error
@@ -27,16 +42,23 @@ type CacheDB interface {
 	Stop() error
 }
 
-type cacheDB struct {
+type cacheManager struct {
 	ldb     *leveldb.DB
 	changes sync.Mutex
 	stopped bool
 }
 
-func NewCacheDB(_ db.DB, ldb *leveldb.DB) CacheDB {
-	return &cacheDB{
-		ldb: ldb,
+func NewCacheDBManager(dataDir string) CacheManager {
+	opts := &opt.Options{OpenFilesCacheCapacity: getConsensusOpenFilesCacheCapacity()}
+	db, err := leveldb.OpenFile(path.Join(dataDir, "cache"), opts)
+	common.DealWithErr(err)
+	return &cacheManager{
+		ldb: db,
 	}
+}
+
+func GetRollbackCacheSize() int {
+	return rollbackCacheSize
 }
 
 func GetFrontierIdentifier(db db.DB) types.HashHeight {
@@ -50,21 +72,16 @@ func GetFrontierIdentifier(db db.DB) types.HashHeight {
 	return *hh
 }
 
-func GetRollbackCacheSize() int {
-	return rollbackCacheSize
-}
-
-func (c *cacheDB) Get() db.DB {
-	c.changes.Lock()
-	defer c.changes.Unlock()
-	if c.stopped {
+func (m *cacheManager) DB() db.DB {
+	m.changes.Lock()
+	defer m.changes.Unlock()
+	if m.stopped {
 		return nil
 	}
-	snapshot, _ := c.ldb.GetSnapshot()
-	return db.NewLevelDBSnapshotWrapper(snapshot).Subset(storageByte)
+	return db.NewLevelDBWrapper(m.ldb).Subset(storageByte)
 }
 
-func (c *cacheDB) Add(identifier types.HashHeight, patch db.Patch) error {
+func (m *cacheManager) Add(identifier types.HashHeight, patch db.Patch) error {
 	temp := db.NewMemDB()
 	if err := temp.Put(frontierIdentifierKey, identifier.Serialize()); err != nil {
 		return err
@@ -76,61 +93,69 @@ func (c *cacheDB) Add(identifier types.HashHeight, patch db.Patch) error {
 	if err := frontierPatch.Replay(patch); err != nil {
 		return err
 	}
-	rollbackPatch := db.RollbackPatch(c.Get(), patch)
+	rollbackPatch := db.RollbackPatch(m.DB(), patch)
 
-	c.changes.Lock()
-	defer c.changes.Unlock()
+	m.changes.Lock()
+	defer m.changes.Unlock()
 
-	if err := c.ldb.Put(common.JoinBytes(rollbackByte, common.Uint64ToBytes(identifier.Height)), rollbackPatch.Dump(), nil); err != nil {
+	if err := m.ldb.Put(common.JoinBytes(rollbackByte, common.Uint64ToBytes(identifier.Height)), rollbackPatch.Dump(), nil); err != nil {
 		return err
 	}
 	if identifier.Height > rollbackCacheSize {
-		if err := c.ldb.Delete(common.JoinBytes(rollbackByte, common.Uint64ToBytes(identifier.Height-rollbackCacheSize)), nil); err != nil {
+		if err := m.ldb.Delete(common.JoinBytes(rollbackByte, common.Uint64ToBytes(identifier.Height-rollbackCacheSize)), nil); err != nil {
 			return err
 		}
 	}
-	if err := db.ApplyPatch(db.NewLevelDBWrapperWithFullDelete(c.ldb).Subset(storageByte), patch); err != nil {
+	if err := db.ApplyPatch(db.NewLevelDBWrapperWithFullDelete(m.ldb).Subset(storageByte), patch); err != nil {
+		return err
+	}
+	// Compact the db manually since the automatic compaction mechanism causes performance issues when throughput increases.
+	if identifier.Height%100 == 0 {
+		m.ldb.CompactRange(*util.BytesPrefix([]byte{}))
+	}
+	return nil
+}
+
+func (m *cacheManager) Pop() error {
+	frontierIdentifier := GetFrontierIdentifier(m.DB())
+	rollbackPatch, err := m.getRollback(frontierIdentifier.Height)
+	if err != nil {
+		return err
+	}
+
+	m.changes.Lock()
+	defer m.changes.Unlock()
+
+	if err := db.ApplyPatch(db.NewLevelDBWrapperWithFullDelete(m.ldb).Subset(storageByte), rollbackPatch); err != nil {
+		return err
+	}
+	if err := m.ldb.Delete(common.JoinBytes(rollbackByte, common.Uint64ToBytes(frontierIdentifier.Height)), nil); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (c *cacheDB) Pop() error {
-	frontierIdentifier := GetFrontierIdentifier(c.Get())
-	rollbackPatch := c.getRollback(frontierIdentifier.Height)
-
-	c.changes.Lock()
-	defer c.changes.Unlock()
-
-	if err := db.ApplyPatch(db.NewLevelDBWrapperWithFullDelete(c.ldb).Subset(storageByte), rollbackPatch); err != nil {
+func (m *cacheManager) Stop() error {
+	m.changes.Lock()
+	defer m.changes.Unlock()
+	if err := m.ldb.Close(); err != nil {
 		return err
 	}
-	if err := c.ldb.Delete(common.JoinBytes(rollbackByte, common.Uint64ToBytes(frontierIdentifier.Height)), nil); err != nil {
-		return err
-	}
+	m.stopped = true
+	m.ldb = nil
 	return nil
 }
 
-func (c *cacheDB) Stop() error {
-	c.changes.Lock()
-	defer c.changes.Unlock()
-	if err := c.ldb.Close(); err != nil {
-		return err
-	}
-	c.stopped = true
-	c.ldb = nil
-	return nil
-}
-
-func (c *cacheDB) getRollback(height uint64) db.Patch {
-	snapshot, _ := c.ldb.GetSnapshot()
+func (m *cacheManager) getRollback(height uint64) (db.Patch, error) {
+	snapshot, _ := m.ldb.GetSnapshot()
 	value, err := snapshot.Get(common.JoinBytes(rollbackByte, common.Uint64ToBytes(height)), nil)
-	if err == leveldb.ErrNotFound {
-		return nil
+	if err != nil {
+		return nil, err
 	}
-	common.DealWithErr(err)
 
 	patch, err := db.NewPatchFromDump(value)
-	common.DealWithErr(err)
-	return patch
+	if err != nil {
+		return nil, err
+	}
+	return patch, nil
 }

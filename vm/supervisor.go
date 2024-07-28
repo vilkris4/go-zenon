@@ -55,11 +55,11 @@ func (s *Supervisor) newBlockContext(block *nom.AccountBlock) vm_context.Account
 func (s *Supervisor) newUserBlockContext(block *nom.AccountBlock) vm_context.AccountVmContext {
 	accountStore := s.chain.GetAccountStore(block.Address, block.Previous())
 	cacheStore := s.chain.GetCacheStore(block.MomentumAcknowledged)
-	if cacheStore == nil {
-		panic(fmt.Sprintf("can't find cacheStore for %v", block.MomentumAcknowledged))
-	}
 	if accountStore == nil {
 		panic(fmt.Sprintf("can't find accountStore for %v %v", block.Address, block.Previous()))
+	}
+	if cacheStore == nil {
+		panic(fmt.Sprintf("can't find cacheStore for %v", block.MomentumAcknowledged))
 	}
 	return vm_context.NewAccountContext(
 		nil,
@@ -72,6 +72,7 @@ func (s *Supervisor) newUserBlockContext(block *nom.AccountBlock) vm_context.Acc
 func (s *Supervisor) newEmbeddedBlockContext(block *nom.AccountBlock) vm_context.AccountVmContext {
 	momentumStore := s.chain.GetMomentumStore(block.MomentumAcknowledged)
 	accountStore := s.chain.GetAccountStore(block.Address, block.Previous())
+	cacheStore := s.chain.GetCacheStore(block.MomentumAcknowledged)
 	cache := s.consensus.FixedPillarReader(block.MomentumAcknowledged)
 	if momentumStore == nil {
 		panic(fmt.Sprintf("can't find momentumStore for %v", block.MomentumAcknowledged))
@@ -79,13 +80,16 @@ func (s *Supervisor) newEmbeddedBlockContext(block *nom.AccountBlock) vm_context
 	if accountStore == nil {
 		panic(fmt.Sprintf("can't find accountStore for %v %v", block.Address, block.Previous()))
 	}
+	if cacheStore == nil {
+		panic(fmt.Sprintf("can't find cacheStore for %v", block.MomentumAcknowledged))
+	}
 	if cache == nil {
 		panic(fmt.Sprintf("can't find cache for %v", block.MomentumAcknowledged))
 	}
 	return vm_context.NewAccountContext(
 		momentumStore,
 		accountStore,
-		nil,
+		cacheStore,
 		cache,
 	)
 }

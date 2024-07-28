@@ -4,7 +4,7 @@ import (
 	"github.com/syndtr/goleveldb/leveldb"
 
 	"github.com/zenon-network/go-zenon/chain"
-	"github.com/zenon-network/go-zenon/chain/cache/storage"
+	cache "github.com/zenon-network/go-zenon/chain/cache/storage"
 	"github.com/zenon-network/go-zenon/consensus"
 	"github.com/zenon-network/go-zenon/pillar"
 	"github.com/zenon-network/go-zenon/protocol"
@@ -31,7 +31,7 @@ func NewZenon(cfg *Config) (Zenon, error) {
 	z := &zenon{
 		config: cfg,
 	}
-	z.chain = chain.NewChain(cfg.NewDBManager("nom"), storage.NewCacheDB(cfg.NewLevelDB("cache")), cfg.GenesisConfig)
+	z.chain = chain.NewChain(cfg.NewDBManager("nom"), cache.NewCacheDBManager(cfg.DataDir), cfg.GenesisConfig)
 	db, levelDb := cfg.NewLevelDB("consensus")
 	z.consensus = consensus.NewConsensus(db, z.chain, false)
 	z.verifier = verifier.NewVerifier(z.chain, z.consensus)

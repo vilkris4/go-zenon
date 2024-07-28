@@ -2,7 +2,6 @@ package cache
 
 import (
 	"bytes"
-	"fmt"
 
 	"github.com/zenon-network/go-zenon/chain/account"
 	"github.com/zenon-network/go-zenon/chain/momentum"
@@ -14,45 +13,45 @@ import (
 )
 
 type cacheExtractor struct {
-	store  store.Cache
+	cache  store.Cache
 	height uint64
 	patch  db.Patch
 }
 
-func (ce *cacheExtractor) Put(key []byte, value []byte) {
-	if cacheKey := ce.tryToGetCacheKey(key, value); cacheKey != nil {
-		ce.patch.Put(cacheKey, value)
+func (e *cacheExtractor) Put(key []byte, value []byte) {
+	if cacheKey := e.tryToGetCacheKey(key, value); cacheKey != nil {
+		e.patch.Put(cacheKey, value)
 	}
 }
 
-func (ce *cacheExtractor) Delete(key []byte) {
-	if cacheKey := ce.tryToGetCacheKey(key, nil); cacheKey != nil {
-		ce.patch.Delete(cacheKey)
+func (e *cacheExtractor) Delete(key []byte) {
+	if cacheKey := e.tryToGetCacheKey(key, nil); cacheKey != nil {
+		e.patch.Put(cacheKey, []byte{})
 	}
 }
 
-func (ce *cacheExtractor) tryToGetCacheKey(key []byte, value []byte) []byte {
+func (e *cacheExtractor) tryToGetCacheKey(key []byte, value []byte) []byte {
 	if bytes.HasPrefix(key, momentum.AccountStorePrefix) {
 		key = bytes.TrimPrefix(key, momentum.AccountStorePrefix)
-		address := key[:types.AddressSize]
 		keyWithoutAddress := key[types.AddressSize:]
+		address, err := types.BytesToAddress(key[:types.AddressSize])
+		common.DealWithErr(err)
 
 		// Cache fused plasma
-		if bytes.Equal(address, types.PlasmaContract.Bytes()) {
+		if address == types.PlasmaContract {
 			prefix := common.JoinBytes(account.StorageKeyPrefix, definition.FusedAmountKeyPrefix)
 			if bytes.HasPrefix(keyWithoutAddress, prefix) {
 				beneficiary := bytes.TrimPrefix(keyWithoutAddress, prefix)
-				return ce.getHeightKey(getFusedAmountPrefix(beneficiary))
+				return e.getHeightKey(getFusedAmountKeyPrefix(beneficiary))
 			}
 		}
 
 		// Cache sporks
-		if bytes.Equal(address, types.SporkContract.Bytes()) {
+		if address == types.SporkContract {
 			prefix := common.JoinBytes(account.StorageKeyPrefix, []byte{definition.SporkInfoPrefix})
 			if bytes.HasPrefix(keyWithoutAddress, prefix) {
 				sporkId := bytes.TrimPrefix(keyWithoutAddress, prefix)
-				fmt.Printf("caching spork %x\n", sporkId)
-				return ce.getHeightKey(getSporkInfoPrefix(sporkId))
+				return e.getHeightKey(getSporkInfoKeyPrefix(sporkId))
 			}
 		}
 
@@ -62,20 +61,18 @@ func (ce *cacheExtractor) tryToGetCacheKey(key []byte, value []byte) []byte {
 				return nil
 			}
 			// Verify that the state has changed
-			a, err := types.BytesToAddress(address)
+			current, err := e.cache.GetChainPlasma(address)
 			common.DealWithErr(err)
-			current, err := ce.store.GetChainPlasma(a)
-			common.DealWithErr(err)
-			valuebig := common.BytesToBigInt(value)
-			if current.Cmp(valuebig) == 0 {
+			if current.Cmp(common.BytesToBigInt(value)) == 0 {
 				return nil
 			}
-			return ce.getHeightKey(getChainPlasmaPrefix(address))
+			return e.getHeightKey(getChainPlasmaKeyPrefix(address.Bytes()))
 		}
 	}
+
 	return nil
 }
 
-func (ce *cacheExtractor) getHeightKey(prefix []byte) []byte {
-	return common.JoinBytes(prefix, common.Uint64ToBytes(ce.height))
+func (e *cacheExtractor) getHeightKey(prefix []byte) []byte {
+	return common.JoinBytes(prefix, common.Uint64ToBytes(e.height))
 }
