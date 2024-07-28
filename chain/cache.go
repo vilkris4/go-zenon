@@ -16,16 +16,16 @@ import (
 )
 
 type chainCache struct {
-	db      storage.CacheDB
+	manager storage.CacheManager
 	log     log15.Logger
 	changes sync.Mutex
 }
 
 func (c *chainCache) getFrontierStore() store.Cache {
-	if db := c.db.Get(); db == nil {
+	if db := c.manager.DB(); db == nil {
 		return nil
 	} else {
-		return cache.NewCacheStore(storage.GetFrontierIdentifier(db), c.db)
+		return cache.NewCacheStore(storage.GetFrontierIdentifier(db), c.manager)
 	}
 }
 
@@ -38,7 +38,7 @@ func (c *chainCache) GetFrontierCacheStore() store.Cache {
 func (c *chainCache) GetCacheStore(identifier types.HashHeight) store.Cache {
 	c.changes.Lock()
 	defer c.changes.Unlock()
-	return cache.NewCacheStore(identifier, c.db)
+	return cache.NewCacheStore(identifier, c.manager)
 }
 
 func (cc *chainCache) UpdateCache(insertLocker sync.Locker, detailed *nom.DetailedMomentum, changes db.Patch) error {
@@ -65,7 +65,7 @@ func (c *chainCache) update(detailed *nom.DetailedMomentum, changes db.Patch) er
 	if err != nil {
 		return err
 	}
-	if err := c.db.Add(momentum.Identifier(), patch); err != nil {
+	if err := c.manager.Add(momentum.Identifier(), patch); err != nil {
 		return err
 	}
 	return nil
@@ -102,7 +102,7 @@ func (c *chainCache) rollbackTo(identifier types.HashHeight) error {
 			break
 		}
 		c.log.Info("rollbacking", "momentum-identifier", frontier)
-		if err := c.db.Pop(); err != nil {
+		if err := c.manager.Pop(); err != nil {
 			return err
 		}
 	}
@@ -114,7 +114,7 @@ func (c *chainCache) Init(chainManager db.Manager, momentumStore store.Momentum)
 	c.changes.Lock()
 	defer c.changes.Unlock()
 	chainFrontier := db.GetFrontierIdentifier(chainManager.Frontier())
-	cacheFrontier := storage.GetFrontierIdentifier(c.db.Get())
+	cacheFrontier := storage.GetFrontierIdentifier(c.manager.DB())
 
 	if cacheFrontier.Height == chainFrontier.Height {
 		if cacheFrontier.Hash != chainFrontier.Hash {
@@ -156,9 +156,9 @@ func (c *chainCache) Init(chainManager db.Manager, momentumStore store.Momentum)
 	return nil
 }
 
-func NewChainCache(db storage.CacheDB) *chainCache {
+func NewChainCache(cacheManager storage.CacheManager) *chainCache {
 	return &chainCache{
-		db:  db,
-		log: common.ChainLogger.New("submodule", "chain-cache"),
+		manager: cacheManager,
+		log:     common.ChainLogger.New("submodule", "chain-cache"),
 	}
 }

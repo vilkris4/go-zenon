@@ -10,7 +10,7 @@ import (
 
 type Cache interface {
 	Identifier() types.HashHeight
-	GetFusedPlasma(types.Address) (*big.Int, error)
+	GetStakeBeneficialAmount(types.Address) (*big.Int, error)
 	GetChainPlasma(types.Address) (*big.Int, error)
 	IsSporkActive(*types.ImplementedSpork) (bool, error)
 

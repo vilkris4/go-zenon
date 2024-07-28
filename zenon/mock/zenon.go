@@ -11,7 +11,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/zenon-network/go-zenon/chain"
-	"github.com/zenon-network/go-zenon/chain/cache/storage"
+	cache "github.com/zenon-network/go-zenon/chain/cache/storage"
 	"github.com/zenon-network/go-zenon/chain/genesis"
 	g "github.com/zenon-network/go-zenon/chain/genesis/mock"
 	"github.com/zenon-network/go-zenon/chain/nom"
@@ -281,7 +281,7 @@ func (zenon *mockZenon) ExpectBalance(address types.Address, standard types.Zeno
 	common.ExpectAmount(zenon.t, amount, big.NewInt(expected))
 }
 func (zenon *mockZenon) ExpectCacheFusedAmount(address types.Address, expected int64) {
-	amount, err := zenon.chain.GetFrontierCacheStore().GetFusedPlasma(address)
+	amount, err := zenon.chain.GetFrontierCacheStore().GetStakeBeneficialAmount(address)
 	common.FailIfErr(zenon.t, err)
 	if amount == nil {
 		amount = big.NewInt(0)
@@ -366,7 +366,7 @@ func newMockZenon(t common.T, customEpochDuration time.Duration) MockZenon {
 	common.SupervisorLogger.SetHandler(log15.LvlFilterHandler(log15.LvlError, log15.StderrHandler))
 	consensus.EpochDuration = customEpochDuration
 
-	ch := chain.NewChain(db.NewLevelDBManager(t.TempDir()), storage.NewCacheDB(db.NewLevelDB(t.TempDir())), genesis.NewGenesis(g.EmbeddedGenesis))
+	ch := chain.NewChain(db.NewLevelDBManager(t.TempDir()), cache.NewCacheDBManager(t.TempDir()), genesis.NewGenesis(g.EmbeddedGenesis))
 	cs := consensus.NewConsensus(db.NewMemDB(), ch, true)
 	supervisor := vm.NewSupervisor(ch, cs)
 	zenon := &mockZenon{

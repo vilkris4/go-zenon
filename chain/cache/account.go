@@ -6,7 +6,6 @@ import (
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/zenon-network/go-zenon/chain/nom"
 	"github.com/zenon-network/go-zenon/common"
-	"github.com/zenon-network/go-zenon/common/db"
 	"github.com/zenon-network/go-zenon/common/types"
 )
 
@@ -15,16 +14,16 @@ var (
 	chainPlasmaKeyPrefix = []byte{1}
 )
 
-func getFusedAmountPrefix(address []byte) []byte {
-	return common.JoinBytes(getAccountCacheKey(address), fusedAmountKeyPrefix)
+func getFusedAmountKeyPrefix(address []byte) []byte {
+	return common.JoinBytes(accountCacheKeyPrefix, fusedAmountKeyPrefix, address)
 }
 
-func getChainPlasmaPrefix(address []byte) []byte {
-	return common.JoinBytes(getAccountCacheKey(address), chainPlasmaKeyPrefix)
+func getChainPlasmaKeyPrefix(address []byte) []byte {
+	return common.JoinBytes(accountCacheKeyPrefix, chainPlasmaKeyPrefix, address)
 }
 
-func (cs *cacheStore) GetFusedPlasma(address types.Address) (*big.Int, error) {
-	value, err := getByHeight(cs.identifier.Height, cs.DB.Subset(getFusedAmountPrefix(address.Bytes())))
+func (cs *cacheStore) GetStakeBeneficialAmount(address types.Address) (*big.Int, error) {
+	value, err := cs.findValue(getFusedAmountKeyPrefix(address.Bytes()))
 	if err == leveldb.ErrNotFound {
 		return big.NewInt(0), nil
 	}
@@ -35,7 +34,7 @@ func (cs *cacheStore) GetFusedPlasma(address types.Address) (*big.Int, error) {
 }
 
 func (cs *cacheStore) GetChainPlasma(address types.Address) (*big.Int, error) {
-	value, err := getByHeight(cs.identifier.Height, cs.DB.Subset(getChainPlasmaPrefix(address.Bytes())))
+	value, err := cs.findValue(getChainPlasmaKeyPrefix(address.Bytes()))
 	if err == leveldb.ErrNotFound {
 		return big.NewInt(0), nil
 	}
@@ -50,52 +49,22 @@ func (cs *cacheStore) pruneAccountCache(blocks []*nom.AccountBlock) error {
 		// Include descedants for consistency
 		all := append([]*nom.AccountBlock{block}, block.DescendantBlocks...)
 		for _, b := range all {
-			prefix := getFusedAmountPrefix(b.Address.Bytes())
-			dataSet := cs.DB.Subset(prefix)
-			fusedPlasmaKeys, err := getKeysToPrune(dataSet, prefix, b.MomentumAcknowledged.Height)
+			prefix := getFusedAmountKeyPrefix(b.Address.Bytes())
+			fusedPlasmaKeys, err := cs.findExpiredKeys(prefix, b.MomentumAcknowledged.Height)
 			if err != nil {
 				return err
 			}
-			prefix = getChainPlasmaPrefix(b.Address.Bytes())
-			dataSet = cs.DB.Subset(prefix)
-			chainPlasmaKeys, err := getKeysToPrune(dataSet, prefix, b.MomentumAcknowledged.Height)
+
+			prefix = getChainPlasmaKeyPrefix(b.Address.Bytes())
+			chainPlasmaKeys, err := cs.findExpiredKeys(prefix, b.MomentumAcknowledged.Height)
 			if err != nil {
 				return err
 			}
+
 			for _, key := range append(fusedPlasmaKeys, chainPlasmaKeys...) {
-				cs.DB.Delete(key)
+				cs.changes.Delete(key)
 			}
 		}
 	}
 	return nil
-}
-
-func getKeysToPrune(dataSet db.DB, prefix []byte, toHeight uint64) ([][]byte, error) {
-	if dataSet == nil {
-		return nil, nil
-	}
-	iterator := dataSet.NewIterator([]byte{})
-	defer iterator.Release()
-
-	keys := [][]byte{}
-	for {
-		if !iterator.Next() {
-			if iterator.Error() != nil {
-				return nil, iterator.Error()
-			}
-			break
-		}
-		key := make([]byte, len(iterator.Key()))
-		copy(key, iterator.Key())
-		if common.BytesToUint64(key) > toHeight {
-			break
-		}
-		keys = append(keys, common.JoinBytes(prefix, key))
-	}
-
-	// Remove key of the current state, so that it's not pruned
-	if len(keys) > 0 {
-		keys = keys[:len(keys)-1]
-	}
-	return keys, nil
 }

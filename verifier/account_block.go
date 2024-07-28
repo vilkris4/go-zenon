@@ -47,17 +47,16 @@ func (av *accountVerifier) getContext(block *nom.AccountBlock) (store.Account, s
 	}
 
 	var momentumStore store.Momentum
-	var cacheStore store.Cache
 	if types.IsEmbeddedAddress(block.Address) {
 		momentumStore = av.chain.GetMomentumStore(block.MomentumAcknowledged)
 		if momentumStore == nil {
 			return nil, nil, nil, ErrABMAMissing
 		}
-	} else {
-		cacheStore = av.chain.GetCacheStore(block.MomentumAcknowledged)
-		if cacheStore == nil {
-			return nil, nil, nil, ErrABMAMissing
-		}
+	}
+
+	cacheStore := av.chain.GetCacheStore(block.MomentumAcknowledged)
+	if cacheStore == nil {
+		return nil, nil, nil, ErrABMAMissing
 	}
 
 	accountStore := av.chain.GetAccountStore(block.Address, block.Previous())
@@ -289,19 +288,22 @@ func (abv *accountBlockVerifier) previous() error {
 	return nil
 }
 func (abv *accountBlockVerifier) momentumAcknowledged() error {
-	var storeIdentifier types.HashHeight
-	if abv.cacheStore != nil {
-		storeIdentifier = abv.cacheStore.Identifier()
-	} else {
+	if abv.momentumStore != nil {
 		momentum, err := abv.momentumStore.GetFrontierMomentum()
 		if err != nil {
 			return InternalError(err)
 		}
-		storeIdentifier = momentum.Identifier()
+		identifier := momentum.Identifier()
+		if identifier != abv.block.MomentumAcknowledged {
+			return InternalError(errors.Errorf("impossible scenario. momentum store exists but frontier is different. Expected MomentumAcknowledged %v but got %v from momentum store", abv.block.MomentumAcknowledged, identifier))
+		}
 	}
 
-	if storeIdentifier != abv.block.MomentumAcknowledged {
-		return InternalError(errors.Errorf("impossible scenario. verifier store exists but frontier is different. Expected MomentumAcknowledged %v but got %v from verifier store", abv.block.MomentumAcknowledged, storeIdentifier))
+	if abv.cacheStore != nil {
+		identifier := abv.cacheStore.Identifier()
+		if identifier != abv.block.MomentumAcknowledged {
+			return InternalError(errors.Errorf("impossible scenario. cache store frontier does not match. Expected MomentumAcknowledged %v but got %v from cache store", abv.block.MomentumAcknowledged, identifier))
+		}
 	}
 
 	// all checks are done by the parent

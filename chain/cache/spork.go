@@ -10,8 +10,8 @@ var (
 	sporkInfoKeyPrefix = []byte{0}
 )
 
-func getSporkInfoPrefix(id []byte) []byte {
-	return common.JoinBytes(getSporkCacheKey(id), sporkInfoKeyPrefix)
+func getSporkInfoKeyPrefix(id []byte) []byte {
+	return common.JoinBytes(sporkCacheKeyPrefix, sporkInfoKeyPrefix, id)
 }
 
 func (cs *cacheStore) IsSporkActive(implemented *types.ImplementedSpork) (bool, error) {
@@ -20,7 +20,7 @@ func (cs *cacheStore) IsSporkActive(implemented *types.ImplementedSpork) (bool, 
 		return false, nil
 	}
 
-	data, err := getByHeight(cs.identifier.Height, cs.DB.Subset(getSporkInfoPrefix(implemented.SporkId.Bytes())))
+	data, err := cs.findValue(getSporkInfoKeyPrefix(implemented.SporkId.Bytes()))
 	if err != nil {
 		return false, err
 	}

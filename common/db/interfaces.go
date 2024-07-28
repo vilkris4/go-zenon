@@ -28,6 +28,8 @@ type Transaction interface {
 
 type StorageIterator interface {
 	Next() bool
+	Prev() bool
+	Last() bool
 
 	Key() []byte
 	Value() []byte
