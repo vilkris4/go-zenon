@@ -9,7 +9,6 @@ import (
 	"github.com/shirou/gopsutil/mem"
 
 	"github.com/zenon-network/go-zenon/common"
-	"github.com/zenon-network/go-zenon/metadata"
 	"github.com/zenon-network/go-zenon/p2p"
 	"github.com/zenon-network/go-zenon/p2p/discover"
 	"github.com/zenon-network/go-zenon/protocol"
@@ -71,8 +70,8 @@ type ProcessInfoResponse struct {
 
 func (api *StatsApi) ProcessInfo() (*ProcessInfoResponse, error) {
 	return &ProcessInfoResponse{
-		Version: metadata.Version,
-		Commit:  metadata.GitCommit,
+		Version: "v0.0.7",                                   //metadata.Version,
+		Commit:  "f18efb89169be331b51ad88e29476c950b700fce", //metadata.GitCommit,
 	}, nil
 }
 
