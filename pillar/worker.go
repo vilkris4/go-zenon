@@ -1,7 +1,6 @@
 package pillar
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -93,11 +92,9 @@ func (w *worker) Process(e consensus.ProducerEvent) common.Task {
 
 func (w *worker) work(task common.TaskResolver, e consensus.ProducerEvent) {
 	var momentumStore store.Momentum
-	startTime := time.Now()
 
 	w.log.Info("producing momentum", "event", e)
 	transaction, detailed, err := w.generateMomentum(e)
-	fmt.Printf("get momentum data %d, took %s\n", detailed.Momentum.Height, time.Since(startTime))
 
 	if err != nil {
 		w.log.Error("failed to generate momentum", "reason", err)
@@ -159,8 +156,6 @@ func (w *worker) work(task common.TaskResolver, e consensus.ProducerEvent) {
 	if w.shouldStop() {
 		return
 	}
-	fmt.Printf("generated momentum %d, took %s\n", detailed.Momentum.Height, time.Since(startTime))
-	fmt.Println("---------")
 	w.log.Info("checking if can update contracts")
 	momentumStore = w.chain.GetFrontierMomentumStore()
 	if err := w.updateContracts(momentumStore); err != nil {
