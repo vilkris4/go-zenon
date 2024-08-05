@@ -41,16 +41,16 @@ func (c *chainCache) GetCacheStore(identifier types.HashHeight) store.Cache {
 	return cache.NewCacheStore(identifier, c.manager)
 }
 
-func (cc *chainCache) UpdateCache(insertLocker sync.Locker, detailed *nom.DetailedMomentum, changes db.Patch) error {
+func (c *chainCache) UpdateCache(insertLocker sync.Locker, detailed *nom.DetailedMomentum, changes db.Patch) error {
 	if insertLocker == nil {
 		return errors.Errorf("insertLocker can't be nil")
 	}
 	if changes == nil {
 		return errors.Errorf("changes can't be nil")
 	}
-	cc.changes.Lock()
-	defer cc.changes.Unlock()
-	if err := cc.update(detailed, changes); err != nil {
+	c.changes.Lock()
+	defer c.changes.Unlock()
+	if err := c.update(detailed, changes); err != nil {
 		return err
 	}
 	return nil

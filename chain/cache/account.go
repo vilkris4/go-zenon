@@ -46,7 +46,6 @@ func (cs *cacheStore) GetChainPlasma(address types.Address) (*big.Int, error) {
 
 func (cs *cacheStore) pruneAccountCache(blocks []*nom.AccountBlock) error {
 	for _, block := range blocks {
-		// Include descedants for consistency
 		all := append([]*nom.AccountBlock{block}, block.DescendantBlocks...)
 		for _, b := range all {
 			prefix := getFusedAmountKeyPrefix(b.Address.Bytes())
