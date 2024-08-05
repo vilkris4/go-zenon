@@ -31,32 +31,27 @@ type accountVerifier struct {
 	consensus consensus.Consensus
 }
 
-func (av *accountVerifier) getContext(block *nom.AccountBlock) (store.Account, store.Momentum, store.Cache, error) {
+func (av *accountVerifier) getContext(block *nom.AccountBlock) (store.Account, store.Momentum, error) {
 	if block.Height == 0 {
-		return nil, nil, nil, ErrABMHeightMissing
+		return nil, nil, ErrABMHeightMissing
 	}
 	if block.Height == 1 && !block.PreviousHash.IsZero() {
-		return nil, nil, nil, ErrABPrevHashMustBeZero
+		return nil, nil, ErrABPrevHashMustBeZero
 	}
 	if block.Height != 1 && block.PreviousHash.IsZero() {
-		return nil, nil, nil, ErrABPrevHashMissing
+		return nil, nil, ErrABPrevHashMissing
 	}
 
 	if block.MomentumAcknowledged.IsZero() {
-		return nil, nil, nil, ErrABMAMustNotBeZero
+		return nil, nil, ErrABMAMustNotBeZero
 	}
 
 	var momentumStore store.Momentum
 	if types.IsEmbeddedAddress(block.Address) {
 		momentumStore = av.chain.GetMomentumStore(block.MomentumAcknowledged)
 		if momentumStore == nil {
-			return nil, nil, nil, ErrABMAMissing
+			return nil, nil, ErrABMAMissing
 		}
-	}
-
-	cacheStore := av.chain.GetCacheStore(block.MomentumAcknowledged)
-	if cacheStore == nil {
-		return nil, nil, nil, ErrABMAMissing
 	}
 
 	accountStore := av.chain.GetAccountStore(block.Address, block.Previous())
@@ -66,31 +61,31 @@ func (av *accountVerifier) getContext(block *nom.AccountBlock) (store.Account, s
 		globalStore := av.chain.GetFrontierMomentumStore().GetAccountStore(block.Address)
 		globalFrontier, err := globalStore.Frontier()
 		if err != nil {
-			return nil, nil, nil, InternalError(err)
+			return nil, nil, InternalError(err)
 		}
 
 		if globalFrontier.Height > block.Height-1 {
 			block, err := globalStore.ByHash(block.PreviousHash)
 			if err != nil {
-				return nil, nil, nil, InternalError(err)
+				return nil, nil, InternalError(err)
 			}
 			if block != nil {
-				return nil, nil, nil, ErrABPrevHasCementedOnTop
+				return nil, nil, ErrABPrevHasCementedOnTop
 			}
-			return nil, nil, nil, ErrABPrevHeightExists
+			return nil, nil, ErrABPrevHeightExists
 		} else {
-			return nil, nil, nil, ErrABPreviousMissing
+			return nil, nil, ErrABPreviousMissing
 		}
 	}
 
-	return accountStore, momentumStore, cacheStore, nil
+	return accountStore, momentumStore, nil
 }
 func (av *accountVerifier) AccountBlock(block *nom.AccountBlock) error {
 	if block.BlockType == nom.BlockTypeContractSend {
 		return ErrABTypeInvalidExternal
 	}
 
-	accountStore, momentumStore, cacheStore, err := av.getContext(block)
+	accountStore, momentumStore, err := av.getContext(block)
 	if err != nil {
 		return err
 	}
@@ -99,7 +94,6 @@ func (av *accountVerifier) AccountBlock(block *nom.AccountBlock) error {
 		block:         block,
 		accountStore:  accountStore,
 		momentumStore: momentumStore,
-		cacheStore:    cacheStore,
 		frontierStore: av.chain.GetFrontierMomentumStore(),
 	}).all()
 }
@@ -108,7 +102,7 @@ func (av *accountVerifier) AccountBlockTransaction(transaction *nom.AccountBlock
 		return ErrABTypeInvalidExternal
 	}
 
-	accountStore, momentumStore, _, err := av.getContext(transaction.Block)
+	accountStore, momentumStore, err := av.getContext(transaction.Block)
 	if err != nil {
 		return err
 	}
@@ -132,7 +126,6 @@ type accountBlockVerifier struct {
 	block         *nom.AccountBlock
 	accountStore  store.Account
 	momentumStore store.Momentum
-	cacheStore    store.Cache
 	frontierStore store.Momentum
 }
 
@@ -296,13 +289,6 @@ func (abv *accountBlockVerifier) momentumAcknowledged() error {
 		identifier := momentum.Identifier()
 		if identifier != abv.block.MomentumAcknowledged {
 			return InternalError(errors.Errorf("impossible scenario. momentum store exists but frontier is different. Expected MomentumAcknowledged %v but got %v from momentum store", abv.block.MomentumAcknowledged, identifier))
-		}
-	}
-
-	if abv.cacheStore != nil {
-		identifier := abv.cacheStore.Identifier()
-		if identifier != abv.block.MomentumAcknowledged {
-			return InternalError(errors.Errorf("impossible scenario. cache store frontier does not match. Expected MomentumAcknowledged %v but got %v from cache store", abv.block.MomentumAcknowledged, identifier))
 		}
 	}
 
