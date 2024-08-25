@@ -55,19 +55,6 @@ func (am *accountManager) Pop() error {
 	return nil
 }
 
-func (am *accountManager) Rebuild(stableDB db.DB) error {
-	if err := am.db.Restabilize(stableDB); err != nil {
-		return err
-	}
-	stableIdentifier := db.GetFrontierIdentifier(stableDB)
-	for height := range am.blocks {
-		if height <= stableIdentifier.Height {
-			delete(am.blocks, height)
-		}
-	}
-	return nil
-}
-
 func (am *accountManager) BlockByHeight(height uint64) (*nom.AccountBlock, error) {
 	block, ok := am.blocks[height]
 	if !ok {
@@ -279,17 +266,42 @@ func (ap *accountPool) rebuild(detailed *nom.DetailedMomentum) error {
 		log := ap.log.New("address", address)
 		log.Debug("start rebuilding")
 
-		stableIdentifier := db.GetFrontierIdentifier(ap.stable.GetStableAccountDB(address))
-		frontierIdentifier := db.GetFrontierIdentifier(ap.getAccountManager(address).db.Frontier())
-		if stableIdentifier == frontierIdentifier {
-			delete(ap.managers, address)
+		uncommitted := make([]*nom.AccountBlock, 0)
+		oldManager := ap.managers[address]
+
+		stable := account.NewAccountStore(address, ap.stable.GetStableAccountDB(address))
+		uncommittedStore := account.NewAccountStore(address, oldManager.db.Frontier())
+		for i := stable.Identifier().Height + 1; i <= uncommittedStore.Identifier().Height; i += 1 {
+			block, err := oldManager.BlockByHeight(i)
+			common.DealWithErr(err)
+			uncommitted = append(uncommitted, block)
+		}
+
+		delete(ap.managers, address)
+
+		if len(uncommitted) == 0 {
 			log.Debug("no uncommitted changes")
 			continue
 		}
 
-		if err := ap.getAccountManager(address).Rebuild(ap.stable.GetStableAccountDB(address)); err != nil {
-			return errors.Errorf("account pool rebuild error. Unable to rebuild account manager for %v. Reason %v", address, err)
+		log.Debug("staring applying blocks", "num-uncommitted", len(uncommitted))
+		manager := &accountManager{
+			db:     db.NewMemDBManager(ap.stable.GetStableAccountDB(address)),
+			blocks: make(map[uint64]*nom.AccountBlock),
 		}
+		for _, block := range uncommitted {
+			patch := oldManager.db.GetPatch(block.Identifier())
+			err := manager.Add(&nom.AccountBlockTransaction{
+				Block:   block,
+				Changes: patch,
+			})
+			if err != nil {
+				return errors.Errorf("account pool rebuild error. Unable to re-apply block %v. Reason %v", block.Header(), err)
+			}
+		}
+		ap.managers[address] = manager
+
+		log.Debug("successfully rebuild", "num-uncommitted", len(uncommitted))
 	}
 
 	ap.log.Debug("finished rebuilding account-pool")
