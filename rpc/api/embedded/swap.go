@@ -110,7 +110,8 @@ type SwapLegacyPillarEntry struct {
 // === Swap Assets ===
 
 func (p *SwapApi) GetAssetsByKeyIdHash(keyIdHash types.Hash) (*SwapAssetEntry, error) {
-	m, context, err := api.GetFrontierContext(p.chain, types.SwapContract)
+	_, context, err := api.GetFrontierContext(p.chain, types.SwapContract)
+	defer context.Release(p.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +130,8 @@ func (p *SwapApi) GetAssetsByKeyIdHash(keyIdHash types.Hash) (*SwapAssetEntry, e
 
 	currentM, err := context.GetFrontierMomentum()
 	common.DealWithErr(err)
-	currentEpoch := int(p.consensus.FixedPillarReader(m.Identifier()).EpochTicker().ToTick(*currentM.Timestamp))
+	reader := p.consensus.FixedPillarReader(context.MomentumStore())
+	currentEpoch := int(reader.EpochTicker().ToTick(*currentM.Timestamp))
 	implementation.ApplyDecay(entry, currentEpoch)
 	return &SwapAssetEntry{
 		KeyIdHash: keyIdHash.String(),
@@ -138,7 +140,8 @@ func (p *SwapApi) GetAssetsByKeyIdHash(keyIdHash types.Hash) (*SwapAssetEntry, e
 	}, nil
 }
 func (p *SwapApi) GetAssets() (map[types.Hash]*SwapAssetEntrySimple, error) {
-	m, context, err := api.GetFrontierContext(p.chain, types.SwapContract)
+	_, context, err := api.GetFrontierContext(p.chain, types.SwapContract)
+	defer context.Release(p.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +154,8 @@ func (p *SwapApi) GetAssets() (map[types.Hash]*SwapAssetEntrySimple, error) {
 	result := make(map[types.Hash]*SwapAssetEntrySimple, len(listRaw))
 	currentM, err := context.GetFrontierMomentum()
 	common.DealWithErr(err)
-	currentEpoch := int(p.consensus.FixedPillarReader(m.Identifier()).EpochTicker().ToTick(*currentM.Timestamp))
+	reader := p.consensus.FixedPillarReader(context.MomentumStore())
+	currentEpoch := int(reader.EpochTicker().ToTick(*currentM.Timestamp))
 	for _, entry := range listRaw {
 		implementation.ApplyDecay(entry, currentEpoch)
 		result[entry.KeyIdHash] = &SwapAssetEntrySimple{
@@ -167,6 +171,7 @@ func (p *SwapApi) GetAssets() (map[types.Hash]*SwapAssetEntrySimple, error) {
 
 func (p *SwapApi) GetLegacyPillars() ([]*SwapLegacyPillarEntry, error) {
 	_, context, err := api.GetFrontierContext(p.chain, types.PillarContract)
+	defer context.Release(p.chain)
 	if err != nil {
 		return nil, err
 	}

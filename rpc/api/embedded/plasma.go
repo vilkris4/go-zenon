@@ -167,11 +167,14 @@ func (a SortFusionEntryByHeight) Less(i, j int) bool {
 
 func (a *PlasmaApi) Get(address types.Address) (*PlasmaInfo, error) {
 	_, context, err := api.GetFrontierContext(a.chain, address)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
 
-	amount, err := a.chain.GetFrontierMomentumStore().GetStakeBeneficialAmount(address)
+	frontierStore := a.chain.GetFrontierMomentumStore()
+	defer a.chain.ReleaseMomentumStore(frontierStore)
+	amount, err := frontierStore.GetStakeBeneficialAmount(address)
 	if err != nil {
 		return nil, err
 	}
@@ -193,6 +196,7 @@ func (a *PlasmaApi) GetEntriesByAddress(address types.Address, pageIndex, pageSi
 	}
 
 	_, context, err := api.GetFrontierContext(a.chain, types.PlasmaContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -231,6 +235,7 @@ type GetRequiredResult struct {
 
 func (a *PlasmaApi) GetRequiredPoWForAccountBlock(param GetRequiredParam) (*GetRequiredResult, error) {
 	_, context, err := api.GetFrontierContext(a.chain, param.SelfAddr)
+	defer context.Release(a.chain)
 	frontierMomentum, err := context.GetFrontierMomentum()
 	if err != nil {
 		return nil, err

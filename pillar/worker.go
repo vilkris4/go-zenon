@@ -121,6 +121,7 @@ func (w *worker) work(task common.TaskResolver, e consensus.ProducerEvent) {
 	}
 	w.log.Info("start creating autoreceive blocks")
 	momentumStore = w.chain.GetFrontierMomentumStore()
+	defer w.chain.ReleaseMomentumStore(momentumStore)
 	for {
 		one := false
 		for _, contractAddress := range w.contracts {
@@ -156,8 +157,7 @@ func (w *worker) work(task common.TaskResolver, e consensus.ProducerEvent) {
 		return
 	}
 	w.log.Info("checking if can update contracts")
-	momentumStore = w.chain.GetFrontierMomentumStore()
-	if err := w.updateContracts(momentumStore); err != nil {
+	if err := w.updateContracts(); err != nil {
 		w.log.Error("failed to update contracts", "reason", err)
 		return
 	}

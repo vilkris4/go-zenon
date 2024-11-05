@@ -10,6 +10,7 @@ func (w *worker) generateMomentum(e consensus.ProducerEvent) (*nom.MomentumTrans
 	defer insert.Unlock()
 
 	store := w.chain.GetFrontierMomentumStore()
+	defer w.chain.ReleaseMomentumStore(store)
 	blocks := w.chain.GetNewMomentumContent()
 
 	previousMomentum, err := store.GetFrontierMomentum()

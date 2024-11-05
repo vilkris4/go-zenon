@@ -49,12 +49,19 @@ func (av *accountVerifier) getContext(block *nom.AccountBlock) (store.Account, s
 	if momentumStore == nil {
 		return nil, nil, ErrABMAMissing
 	}
+	momentum, _ := momentumStore.GetFrontierMomentum()
+	if momentum.Height != block.MomentumAcknowledged.Height {
+		fmt.Println("WHAT")
+	}
 
 	accountStore := av.chain.GetAccountStore(block.Address, block.Previous())
 
 	if accountStore == nil {
+		av.chain.ReleaseMomentumStore(momentumStore)
 		// try to give a better error in case we are not able to give a better error
-		globalStore := av.chain.GetFrontierMomentumStore().GetAccountStore(block.Address)
+		frontierStore := av.chain.GetFrontierMomentumStore()
+		defer av.chain.ReleaseMomentumStore(frontierStore)
+		globalStore := frontierStore.GetAccountStore(block.Address)
 		globalFrontier, err := globalStore.Frontier()
 		if err != nil {
 			return nil, nil, InternalError(err)
@@ -86,6 +93,9 @@ func (av *accountVerifier) AccountBlock(block *nom.AccountBlock) error {
 		return err
 	}
 
+	defer av.chain.ReleaseMomentumStore(momentumStore)
+	defer av.chain.ReleaseAccountStore(accountStore)
+
 	return (&accountBlockVerifier{
 		block:         block,
 		accountStore:  accountStore,
@@ -101,6 +111,9 @@ func (av *accountVerifier) AccountBlockTransaction(transaction *nom.AccountBlock
 	if err != nil {
 		return err
 	}
+
+	defer av.chain.ReleaseMomentumStore(momentumStore)
+	defer av.chain.ReleaseAccountStore(accountStore)
 
 	return (&accountBlockTransactionVerifier{
 		transaction:   transaction,

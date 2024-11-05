@@ -2,8 +2,9 @@ package embedded
 
 import (
 	"encoding/json"
-	"github.com/zenon-network/go-zenon/common"
 	"math/big"
+
+	"github.com/zenon-network/go-zenon/common"
 
 	"github.com/zenon-network/go-zenon/chain"
 	"github.com/zenon-network/go-zenon/common/types"
@@ -13,6 +14,7 @@ import (
 
 func getDepositedQsr(chain chain.Chain, contract types.Address, address types.Address) (*big.Int, error) {
 	_, context, err := api.GetFrontierContext(chain, contract)
+	defer context.Release(chain)
 	if err != nil {
 		return nil, err
 	}
@@ -25,6 +27,7 @@ func getDepositedQsr(chain chain.Chain, contract types.Address, address types.Ad
 }
 func getUncollectedReward(chain chain.Chain, contract types.Address, address types.Address) (*definition.RewardDeposit, error) {
 	_, context, err := api.GetFrontierContext(chain, contract)
+	defer context.Release(chain)
 	if err != nil {
 		return nil, err
 	}
@@ -79,6 +82,7 @@ func getFrontierRewardByPage(chain chain.Chain, contract types.Address, address 
 	}
 
 	_, context, err := api.GetFrontierContext(chain, contract)
+	defer context.Release(chain)
 	if err != nil {
 		return nil, err
 	}

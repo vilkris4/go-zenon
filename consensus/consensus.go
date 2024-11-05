@@ -8,6 +8,7 @@ import (
 
 	"github.com/zenon-network/go-zenon/chain"
 	"github.com/zenon-network/go-zenon/chain/nom"
+	"github.com/zenon-network/go-zenon/chain/store"
 	"github.com/zenon-network/go-zenon/common"
 	"github.com/zenon-network/go-zenon/common/db"
 	"github.com/zenon-network/go-zenon/common/types"
@@ -34,16 +35,18 @@ type consensus struct {
 	closed chan struct{}
 }
 
-func (cs *consensus) FrontierPillarReader() api.PillarReader {
-	return &API{
-		momentumStore: cs.chain.GetFrontierMomentumStore(),
-		er:            cs.electionManager,
-		points:        cs.points,
+/*
+	func (cs *consensus) FrontierPillarReader() api.PillarReader {
+		return &API{
+			momentumStore: cs.chain.GetFrontierMomentumStore(),
+			er:            cs.electionManager,
+			points:        cs.points,
+		}
 	}
-}
-func (cs *consensus) FixedPillarReader(identifier types.HashHeight) api.PillarReader {
+*/
+func (cs *consensus) FixedPillarReader(store store.Momentum) api.PillarReader {
 	return &API{
-		momentumStore: cs.chain.GetMomentumStore(identifier),
+		momentumStore: store,
 		er:            cs.electionManager,
 		points:        cs.points,
 	}

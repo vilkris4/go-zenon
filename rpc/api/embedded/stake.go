@@ -144,6 +144,7 @@ func (a *StakeApi) GetEntriesByAddress(address types.Address, pageIndex, pageSiz
 	}
 
 	_, context, err := api.GetFrontierContext(a.chain, types.StakeContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}

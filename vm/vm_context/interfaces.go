@@ -3,6 +3,7 @@ package vm_context
 import (
 	"math/big"
 
+	"github.com/zenon-network/go-zenon/chain"
 	"github.com/zenon-network/go-zenon/chain/nom"
 	"github.com/zenon-network/go-zenon/chain/store"
 	"github.com/zenon-network/go-zenon/common/types"
@@ -35,4 +36,6 @@ type AccountVmContext interface {
 	IsAcceleratorSporkEnforced() bool
 	IsHtlcSporkEnforced() bool
 	IsBridgeAndLiquiditySporkEnforced() bool
+
+	Release(chain chain.Chain)
 }

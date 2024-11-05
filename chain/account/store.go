@@ -13,6 +13,7 @@ func getStorageIterator() []byte {
 
 type accountStore struct {
 	address types.Address
+	handle  db.Handle
 	db.DB
 }
 
@@ -23,7 +24,7 @@ func (as *accountStore) Storage() db.DB {
 	return db.DisableNotFound(as.Subset(getStorageIterator()))
 }
 func (as *accountStore) Snapshot() store.Account {
-	return NewAccountStore(as.address, as.DB.Snapshot())
+	return NewAccountStore(as.address, as.DB.Snapshot(), as.handle)
 }
 func (as *accountStore) Identifier() types.HashHeight {
 	frontier, err := as.Frontier()
@@ -33,13 +34,17 @@ func (as *accountStore) Identifier() types.HashHeight {
 	}
 	return frontier.Identifier()
 }
+func (as *accountStore) Handle() db.Handle {
+	return as.handle
+}
 
-func NewAccountStore(address types.Address, db db.DB) store.Account {
+func NewAccountStore(address types.Address, db db.DB, handle db.Handle) store.Account {
 	if db == nil {
 		panic("account store can't operate with nil db")
 	}
 	return &accountStore{
 		address: address,
+		handle:  handle,
 		DB:      db,
 	}
 }

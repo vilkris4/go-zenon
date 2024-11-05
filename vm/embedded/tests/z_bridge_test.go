@@ -3,14 +3,15 @@ package tests
 import (
 	"crypto/ecdsa"
 	"encoding/base64"
-	eabi "github.com/ethereum/go-ethereum/accounts/abi"
-	ecommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/zenon-network/go-zenon/vm/embedded/implementation"
 	"math/big"
 	"strconv"
 	"testing"
 	"time"
+
+	eabi "github.com/ethereum/go-ethereum/accounts/abi"
+	ecommon "github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/zenon-network/go-zenon/vm/embedded/implementation"
 
 	g "github.com/zenon-network/go-zenon/chain/genesis/mock"
 	"github.com/zenon-network/go-zenon/chain/nom"
@@ -639,7 +640,9 @@ func activateBridgeStep9(t *testing.T, z mock.MockZenon) {
 	requests, err := bridgeAPI.GetAllUnwrapTokenRequests(0, 2)
 	common.DealWithErr(err)
 
-	frMom, err := z.Chain().GetFrontierMomentumStore().GetFrontierMomentum()
+	store := z.Chain().GetFrontierMomentumStore()
+	defer z.Chain().ReleaseMomentumStore(store)
+	frMom, err := store.GetFrontierMomentum()
 	common.DealWithErr(err)
 	z.InsertMomentumsTo(frMom.Height + requests.List[0].RedeemableIn)
 
@@ -831,7 +834,9 @@ t=2001-09-09T02:01:50+0000 lvl=dbug msg="burned ZTS" module=embedded contract=to
 	requests, err := bridgeAPI.GetAllUnwrapTokenRequests(0, 2)
 	common.DealWithErr(err)
 
-	frMom, err := z.Chain().GetFrontierMomentumStore().GetFrontierMomentum()
+	store := z.Chain().GetFrontierMomentumStore()
+	defer z.Chain().ReleaseMomentumStore(store)
+	frMom, err := store.GetFrontierMomentum()
 	common.DealWithErr(err)
 	z.InsertMomentumsTo(frMom.Height + requests.List[0].RedeemableIn)
 
@@ -985,7 +990,9 @@ t=2001-09-09T02:01:50+0000 lvl=dbug msg="burned ZTS" module=embedded contract=to
 	requests, err := bridgeAPI.GetAllUnwrapTokenRequests(0, 2)
 	common.DealWithErr(err)
 
-	frMom, err := z.Chain().GetFrontierMomentumStore().GetFrontierMomentum()
+	store := z.Chain().GetFrontierMomentumStore()
+	defer z.Chain().ReleaseMomentumStore(store)
+	frMom, err := store.GetFrontierMomentum()
 	common.DealWithErr(err)
 	z.InsertMomentumsTo(frMom.Height + requests.List[0].RedeemableIn)
 
@@ -1327,7 +1334,9 @@ t=2001-09-09T02:01:50+0000 lvl=dbug msg="burned ZTS" module=embedded contract=to
 	defer z.CallContract(unhalt(g.User5.Address)).Error(t, nil)
 	insertMomentums(z, 2)
 
-	frMom, err = z.Chain().GetFrontierMomentumStore().GetFrontierMomentum()
+	store = z.Chain().GetFrontierMomentumStore()
+	defer z.Chain().ReleaseMomentumStore(store)
+	frMom, err = store.GetFrontierMomentum()
 	common.DealWithErr(err)
 	z.InsertMomentumsTo(frMom.Height + bridgeInfo.UnhaltDurationInMomentums + 1)
 
@@ -3249,7 +3258,9 @@ func nominateGuardians(t *testing.T, z mock.MockZenon, administrator types.Addre
 	defer z.CallContract(nominateGuardiansStep(administrator, guardians)).Error(t, nil)
 	insertMomentums(z, 2)
 
-	frMom, err := z.Chain().GetFrontierMomentumStore().GetFrontierMomentum()
+	store := z.Chain().GetFrontierMomentumStore()
+	defer z.Chain().ReleaseMomentumStore(store)
+	frMom, err := store.GetFrontierMomentum()
 	common.DealWithErr(err)
 	z.InsertMomentumsTo(frMom.Height + delay + 2)
 
@@ -3272,7 +3283,9 @@ func changeTssWithAdministrator(t *testing.T, z mock.MockZenon, administrator ty
 	defer z.CallContract(changeTssWithAdministratorStep(administrator, newTssPublicKey)).Error(t, nil)
 	insertMomentums(z, 2)
 
-	frMom, err := z.Chain().GetFrontierMomentumStore().GetFrontierMomentum()
+	store := z.Chain().GetFrontierMomentumStore()
+	defer z.Chain().ReleaseMomentumStore(store)
+	frMom, err := store.GetFrontierMomentum()
 	common.DealWithErr(err)
 	z.InsertMomentumsTo(frMom.Height + delay + 2)
 
@@ -3306,7 +3319,9 @@ func changeAdministrator(t *testing.T, z mock.MockZenon, administrator types.Add
 	defer z.CallContract(changeAdministratorStep(administrator, newAdministrator)).Error(t, nil)
 	insertMomentums(z, 2)
 
-	frMom, err := z.Chain().GetFrontierMomentumStore().GetFrontierMomentum()
+	store := z.Chain().GetFrontierMomentumStore()
+	defer z.Chain().ReleaseMomentumStore(store)
+	frMom, err := store.GetFrontierMomentum()
 	common.DealWithErr(err)
 	z.InsertMomentumsTo(frMom.Height + delay + 2)
 
@@ -3506,7 +3521,9 @@ func setTokenPair(t *testing.T, z mock.MockZenon, administrator types.Address, d
 		minAmount, feePercentage, redeemDelay, metadata)).Error(t, nil)
 	insertMomentums(z, 2)
 
-	frMom, err := z.Chain().GetFrontierMomentumStore().GetFrontierMomentum()
+	store := z.Chain().GetFrontierMomentumStore()
+	defer z.Chain().ReleaseMomentumStore(store)
+	frMom, err := store.GetFrontierMomentum()
 	common.FailIfErr(t, err)
 	z.InsertMomentumsTo(frMom.Height + delay)
 

@@ -67,8 +67,11 @@ func newMockTransaction(seed int64, db DB) *mockTransaction {
 
 func TestVersionedDBConcurrentUse(t *testing.T) {
 	m := NewLevelDBManager(t.TempDir())
-	v0 := m.Frontier()
-	v01 := m.Frontier()
+	defer m.Stop()
+	v0, handle := m.Frontier()
+	defer m.Release(handle)
+	v01, handle := m.Frontier()
+	defer m.Release(handle)
 
 	t1 := newMockTransaction(1, v0)
 	common.ExpectString(t, DebugPatch(t1.patch), `
@@ -86,7 +89,8 @@ d5104dc76695721d - b80704bb7b4d7c03`)
 8866cb397916001e - 9408d2ac22c4d294
 d5104dc76695721d - b80704bb7b4d7c03`)
 
-	v1 := m.Frontier()
+	v1, handle := m.Frontier()
+	defer m.Release(handle)
 	frontier1 := GetFrontierIdentifier(v1)
 	common.ExpectString(t, fmt.Sprintf("%v", frontier1), `{5c93068287abae27e59aa5507bab95c2779e6e65c6d6210153e9614ae44f1d88 1}`)
 
@@ -107,7 +111,7 @@ func TestVersionedDBVersions(t *testing.T) {
 	dir := t.TempDir()
 	m := NewLevelDBManager(dir)
 
-	db := m.Frontier()
+	db, handle := m.Frontier()
 	t1 := newMockTransaction(1, db)
 	common.ExpectString(t, DebugPatch(t1.patch), `
 0c697f48392907a0 - a68447a4189deb99
@@ -117,8 +121,10 @@ func TestVersionedDBVersions(t *testing.T) {
 d5104dc76695721d - b80704bb7b4d7c03`)
 	common.ExpectString(t, fmt.Sprintf("%+v", t1.commit.Identifier()), `{Hash:5c93068287abae27e59aa5507bab95c2779e6e65c6d6210153e9614ae44f1d88 Height:1}`)
 	common.DealWithErr(m.Add(t1))
+	m.Release(handle)
 
-	db = m.Frontier()
+	db, handle = m.Frontier()
+
 	common.ExpectString(t, DebugDB(db), `
 00 - 0a220a205c93068287abae27e59aa5507bab95c2779e6e65c6d6210153e9614ae44f1d881001
 015c93068287abae27e59aa5507bab95c2779e6e65c6d6210153e9614ae44f1d88 - 0000000000000001
@@ -138,8 +144,9 @@ b6666b02a03da270 - 1a634384d0ba8f10
 cea06b688be116ca - f6bd65cefe8c20dc`)
 	common.ExpectString(t, fmt.Sprintf("%+v", t2.commit.Identifier()), `{Hash:e5a89ef7fcf0f3c3fe81a782ac68e497bdb0155b3c41eff02113ab67fe739249 Height:2}`)
 	common.DealWithErr(m.Add(t2))
+	m.Release(handle)
 
-	db = m.Frontier()
+	db, handle = m.Frontier()
 	f2 := GetFrontierIdentifier(db)
 	t3 := newMockTransaction(3, db)
 	common.ExpectString(t, DebugPatch(t3.patch), `
@@ -150,8 +157,10 @@ dc2864602be7fb85 - d38967f931a50490
 f25f4b21eef64b43 - 9c0a8a2bfc0914df`)
 	common.ExpectString(t, fmt.Sprintf("%+v", t3.commit.Identifier()), `{Hash:d8ba48392cd7843812028c9fc3d7c92e232b8a725db741d69c930772e8551a85 Height:3}`)
 	common.DealWithErr(m.Add(t3))
+	m.Release(handle)
 
-	db = m.Frontier()
+	db, handle = m.Frontier()
+
 	common.ExpectString(t, DebugDB(db), `
 00 - 0a220a20d8ba48392cd7843812028c9fc3d7c92e232b8a725db741d69c930772e8551a851003
 015c93068287abae27e59aa5507bab95c2779e6e65c6d6210153e9614ae44f1d88 - 0000000000000001
@@ -179,12 +188,16 @@ f25f4b21eef64b43 - 9c0a8a2bfc0914df`)
 	patch, err := db.Changes()
 	common.FailIfErr(t, err)
 	common.ExpectString(t, DebugPatch(patch), ``)
+	m.Release(handle)
 
-	patch, err = m.Get(f2).Changes()
+	g1, handle := m.Get(f2)
+	patch, err = g1.Changes()
 	common.FailIfErr(t, err)
 	common.ExpectString(t, DebugPatch(patch), ``)
+	m.Release(handle)
 
-	common.ExpectString(t, DebugDB(m.Get(f1)), `
+	g1, handle = m.Get(f1)
+	common.ExpectString(t, DebugDB(g1), `
 00 - 0a220a205c93068287abae27e59aa5507bab95c2779e6e65c6d6210153e9614ae44f1d881001
 015c93068287abae27e59aa5507bab95c2779e6e65c6d6210153e9614ae44f1d88 - 0000000000000001
 020000000000000001 - 5c93068287abae27e59aa5507bab95c2779e6e65c6d6210153e9614ae44f1d8800000000000000000000000000000000000000000000000000000000000000003fc795fb4006a3d73dd511f493010f6d85c7448155ec6c444acaa9238f30c19e0000000000000001
@@ -193,7 +206,10 @@ f25f4b21eef64b43 - 9c0a8a2bfc0914df`)
 4d65822107fcfd52 - 78629a0f5f3f164f
 8866cb397916001e - 9408d2ac22c4d294
 d5104dc76695721d - b80704bb7b4d7c03`)
-	common.ExpectString(t, DebugDB(m.Get(f2)), `
+	m.Release(handle)
+
+	g1, handle = m.Get(f2)
+	common.ExpectString(t, DebugDB(g1), `
 00 - 0a220a20e5a89ef7fcf0f3c3fe81a782ac68e497bdb0155b3c41eff02113ab67fe7392491002
 015c93068287abae27e59aa5507bab95c2779e6e65c6d6210153e9614ae44f1d88 - 0000000000000001
 01e5a89ef7fcf0f3c3fe81a782ac68e497bdb0155b3c41eff02113ab67fe739249 - 0000000000000002
@@ -209,7 +225,10 @@ d5104dc76695721d - b80704bb7b4d7c03`)
 b6666b02a03da270 - 1a634384d0ba8f10
 cea06b688be116ca - f6bd65cefe8c20dc
 d5104dc76695721d - b80704bb7b4d7c03`)
-	common.ExpectString(t, DebugDB(m.Get(f3)), `
+	m.Release(handle)
+
+	g1, handle = m.Get(f3)
+	common.ExpectString(t, DebugDB(g1), `
 00 - 0a220a20d8ba48392cd7843812028c9fc3d7c92e232b8a725db741d69c930772e8551a851003
 015c93068287abae27e59aa5507bab95c2779e6e65c6d6210153e9614ae44f1d88 - 0000000000000001
 01d8ba48392cd7843812028c9fc3d7c92e232b8a725db741d69c930772e8551a85 - 0000000000000003
@@ -232,10 +251,12 @@ cea06b688be116ca - f6bd65cefe8c20dc
 d5104dc76695721d - b80704bb7b4d7c03
 dc2864602be7fb85 - d38967f931a50490
 f25f4b21eef64b43 - 9c0a8a2bfc0914df`)
+	m.Release(handle)
 
 	common.FailIfErr(t, m.Stop())
 	m2 := NewLevelDBManager(dir)
-	db = m2.Frontier()
+	defer m2.Stop()
+	db, handle = m2.Frontier()
 	common.ExpectString(t, DebugDB(db), `
 00 - 0a220a20d8ba48392cd7843812028c9fc3d7c92e232b8a725db741d69c930772e8551a851003
 015c93068287abae27e59aa5507bab95c2779e6e65c6d6210153e9614ae44f1d88 - 0000000000000001
@@ -259,4 +280,5 @@ cea06b688be116ca - f6bd65cefe8c20dc
 d5104dc76695721d - b80704bb7b4d7c03
 dc2864602be7fb85 - d38967f931a50490
 f25f4b21eef64b43 - 9c0a8a2bfc0914df`)
+	m2.Release(handle)
 }

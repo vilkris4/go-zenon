@@ -59,11 +59,15 @@ func (c chainBridge) GetTransactions() []*nom.AccountBlock {
 }
 
 func (c chainBridge) HasBlock(hash types.Hash) bool {
-	m, _ := c.chain.GetFrontierMomentumStore().GetMomentumByHash(hash)
+	store := c.chain.GetFrontierMomentumStore()
+	defer c.chain.ReleaseMomentumStore(store)
+	m, _ := store.GetMomentumByHash(hash)
 	return m != nil
 }
 func (c chainBridge) GetBlockHashesFromHash(hash types.Hash, amount uint64) ([]types.Hash, error) {
-	momentums, err := c.chain.GetFrontierMomentumStore().GetMomentumsByHash(hash, false, amount)
+	store := c.chain.GetFrontierMomentumStore()
+	defer c.chain.ReleaseMomentumStore(store)
+	momentums, err := store.GetMomentumsByHash(hash, false, amount)
 	if err != nil {
 		return nil, err
 	}
@@ -75,6 +79,7 @@ func (c chainBridge) GetBlockHashesFromHash(hash types.Hash, amount uint64) ([]t
 }
 func (c chainBridge) GetBlock(hash types.Hash) *nom.DetailedMomentum {
 	store := c.chain.GetFrontierMomentumStore()
+	defer c.chain.ReleaseMomentumStore(store)
 	momentum, _ := store.GetMomentumByHash(hash)
 	if momentum == nil {
 		return nil
@@ -93,6 +98,7 @@ func (c chainBridge) GetBlock(hash types.Hash) *nom.DetailedMomentum {
 }
 func (c chainBridge) CurrentBlock() *nom.Momentum {
 	store := c.chain.GetFrontierMomentumStore()
+	defer c.chain.ReleaseMomentumStore(store)
 	momentum, err := store.GetFrontierMomentum()
 	common.DealWithErr(err)
 
@@ -100,10 +106,12 @@ func (c chainBridge) CurrentBlock() *nom.Momentum {
 }
 func (c chainBridge) GetBlockByNumber(num uint64) (*nom.Momentum, error) {
 	store := c.chain.GetFrontierMomentumStore()
+	defer c.chain.ReleaseMomentumStore(store)
 	return store.GetMomentumByHeight(num)
 }
 func (c chainBridge) Status() (td uint64, currentBlock types.Hash, genesisBlock types.Hash) {
 	store := c.chain.GetFrontierMomentumStore()
+	defer c.chain.ReleaseMomentumStore(store)
 	frontier, err := store.GetFrontierMomentum()
 	common.DealWithErr(err)
 
@@ -118,6 +126,7 @@ func (c chainBridge) InsertChain(momentums []*nom.DetailedMomentum) (int, error)
 	defer insert.Unlock()
 
 	store := c.chain.GetFrontierMomentumStore()
+	defer c.chain.ReleaseMomentumStore(store)
 
 	// remove momentums which we already have
 	start := 0

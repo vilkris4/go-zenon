@@ -45,7 +45,9 @@ func (c *chain) Init() error {
 	c.log.Info("initializing ...")
 	defer c.log.Info("initialized")
 
-	c.log.Info("starting chain module with db", "location", c.chainManager.Location(), "frontier-identifier", c.GetFrontierMomentumStore().Identifier())
+	frontierStore := c.GetFrontierMomentumStore()
+	c.log.Info("starting chain module with db", "location", c.chainManager.Location(), "frontier-identifier", frontierStore.Identifier())
+	c.ReleaseMomentumStore(frontierStore)
 
 	// check if the configured genesis matches the existent chain
 	if err := c.checkGenesisCompatibility(); err != nil {
@@ -54,7 +56,8 @@ func (c *chain) Init() error {
 	types.SporkAddress = c.genesis.GetSporkAddress()
 	c.Register(c.accountPool)
 
-	frontierStore := c.GetFrontierMomentumStore()
+	frontierStore = c.GetFrontierMomentumStore()
+	defer c.ReleaseMomentumStore(frontierStore)
 	frontier, err := frontierStore.GetFrontierMomentum()
 	if err != nil {
 		return err
@@ -93,12 +96,14 @@ func (c *chain) Stop() error {
 	defer c.log.Info("stopped")
 
 	c.UnRegister(c.accountPool)
+	c.accountPool.Clear()
 
 	return c.chainManager.Stop()
 }
 
 func (c *chain) checkGenesisCompatibility() error {
 	frontierStore := c.GetFrontierMomentumStore()
+	defer c.ReleaseMomentumStore(frontierStore)
 	if frontierStore.Identifier().IsZero() {
 		insert := c.AcquireInsert("add genesis momentum")
 		defer insert.Unlock()

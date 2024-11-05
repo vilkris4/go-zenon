@@ -30,8 +30,8 @@ func NewHtlcApi(z zenon.Zenon) *HtlcApi {
 }
 
 func (a *HtlcApi) GetById(id types.Hash) (*definition.HtlcInfo, error) {
-
 	_, context, err := api.GetFrontierContext(a.chain, types.HtlcContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -46,6 +46,7 @@ func (a *HtlcApi) GetById(id types.Hash) (*definition.HtlcInfo, error) {
 
 func (a *HtlcApi) GetProxyUnlockStatus(address types.Address) (bool, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.HtlcContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return false, err
 	}

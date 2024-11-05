@@ -41,6 +41,7 @@ type MomentumPool interface {
 
 	GetFrontierMomentumStore() store.Momentum
 	GetMomentumStore(identifier types.HashHeight) store.Momentum
+	ReleaseMomentumStore(store store.Momentum)
 }
 
 type AccountPool interface {
@@ -58,8 +59,11 @@ type AccountPool interface {
 	GetPatch(address types.Address, identifier types.HashHeight) db.Patch
 	GetAccountStore(address types.Address, identifier types.HashHeight) store.Account
 	GetFrontierAccountStore(address types.Address) store.Account
+	ReleaseAccountStore(store store.Account)
 
 	GetNewMomentumContent() []*nom.AccountBlock
 	GetAllUncommittedAccountBlocks() []*nom.AccountBlock
 	GetUncommittedAccountBlocksByAddress(address types.Address) []*nom.AccountBlock
+
+	Clear()
 }

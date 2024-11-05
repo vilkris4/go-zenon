@@ -47,7 +47,7 @@ func NewSupervisor(chain chain.Chain, consensus consensus.Consensus) *Supervisor
 func (s *Supervisor) newBlockContext(block *nom.AccountBlock) vm_context.AccountVmContext {
 	momentumStore := s.chain.GetMomentumStore(block.MomentumAcknowledged)
 	accountStore := s.chain.GetAccountStore(block.Address, block.Previous())
-	cache := s.consensus.FixedPillarReader(block.MomentumAcknowledged)
+	cache := s.consensus.FixedPillarReader(momentumStore)
 	if momentumStore == nil {
 		panic(fmt.Sprintf("can't find momentumStore for %v", block.MomentumAcknowledged))
 	}
@@ -64,8 +64,9 @@ func (s *Supervisor) newBlockContext(block *nom.AccountBlock) vm_context.Account
 	)
 }
 func (s *Supervisor) newMomentumContext(momentum *nom.Momentum) vm_context.MomentumVMContext {
+	ms := s.chain.GetMomentumStore(momentum.Previous())
 	return vm_context.NewMomentumVMContext(
-		s.chain.GetMomentumStore(momentum.Previous()),
+		ms,
 	)
 }
 
@@ -90,6 +91,8 @@ func (s *Supervisor) ApplyMomentum(detailed *nom.DetailedMomentum) (result *nom.
 		return nil, err
 	}
 	context := s.newMomentumContext(momentum)
+	defer context.Release(s.chain)
+
 	vm := NewMomentumVM(context)
 	err := vm.applyMomentum(s.chain, momentum)
 	if err != nil {
@@ -107,6 +110,7 @@ func (s *Supervisor) GenerateFromTemplate(template *nom.AccountBlock, signFunc S
 		return nil, err
 	}
 	context := s.newBlockContext(template)
+	defer context.Release(s.chain)
 	if err := s.setBlockPlasma(context, template); err != nil {
 		return nil, err
 	}
@@ -126,6 +130,7 @@ func (s *Supervisor) GenerateAutoReceive(sendBlock *nom.AccountBlock) (*Contract
 		return nil, err
 	}
 	context := s.newBlockContext(template)
+	defer context.Release(s.chain)
 	if err := s.setBlockPlasma(context, template); err != nil {
 		return nil, err
 	}
@@ -163,6 +168,7 @@ func (s *Supervisor) GenerateMomentum(detailed *nom.DetailedMomentum, signFunc S
 		return nil, err
 	}
 	context := s.newMomentumContext(template)
+	defer context.Release(s.chain)
 	vm := NewMomentumVM(context)
 	err := vm.applyMomentum(s.chain, template)
 	if err != nil {
@@ -212,6 +218,7 @@ func (s *Supervisor) applyBlock(block *nom.AccountBlock, signFunc SignFunc) (tra
 		return nil, err
 	}
 	context := s.newBlockContext(block)
+	defer context.Release(s.chain)
 	vm := NewVM(context)
 	err := vm.applyBlock(block)
 	if err != nil {
@@ -333,6 +340,7 @@ func (s *Supervisor) setBlockFields(block *nom.AccountBlock) {
 func (s *Supervisor) setBlockHH(block *nom.AccountBlock) error {
 	if block.PreviousHash == types.ZeroHash && block.Height == 0 {
 		store := s.chain.GetFrontierAccountStore(block.Address)
+		defer s.chain.ReleaseAccountStore(store)
 		frontier := store.Identifier()
 
 		block.PreviousHash = frontier.Hash
@@ -342,6 +350,7 @@ func (s *Supervisor) setBlockHH(block *nom.AccountBlock) error {
 }
 func (s *Supervisor) setBlockMomentum(block *nom.AccountBlock) error {
 	store := s.chain.GetFrontierMomentumStore()
+	defer s.chain.ReleaseMomentumStore(store)
 	frontierMomentum, err := store.GetFrontierMomentum()
 	if err != nil {
 		return err

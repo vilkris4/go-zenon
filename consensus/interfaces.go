@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/zenon-network/go-zenon/chain/nom"
+	"github.com/zenon-network/go-zenon/chain/store"
 	"github.com/zenon-network/go-zenon/common/types"
 	"github.com/zenon-network/go-zenon/consensus/api"
 )
@@ -40,6 +41,6 @@ type Consensus interface {
 
 	GetMomentumProducer(timestamp time.Time) (*types.Address, error)
 
-	FrontierPillarReader() api.PillarReader
-	FixedPillarReader(types.HashHeight) api.PillarReader
+	//	FrontierPillarReader() api.PillarReader
+	FixedPillarReader(store.Momentum) api.PillarReader
 }

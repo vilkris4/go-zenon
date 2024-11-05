@@ -165,6 +165,7 @@ type ProjectList struct {
 
 func (a *AcceleratorApi) GetAll(pageIndex, pageSize uint32) (*ProjectList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.AcceleratorContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -194,6 +195,7 @@ func (a *AcceleratorApi) GetAll(pageIndex, pageSize uint32) (*ProjectList, error
 }
 func (a *AcceleratorApi) GetProjectById(id types.Hash) (*Project, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.AcceleratorContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -206,6 +208,7 @@ func (a *AcceleratorApi) GetProjectById(id types.Hash) (*Project, error) {
 }
 func (a *AcceleratorApi) GetPhaseById(id types.Hash) (*Phase, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.AcceleratorContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -221,6 +224,7 @@ func (a *AcceleratorApi) GetPhaseById(id types.Hash) (*Phase, error) {
 }
 func (a *AcceleratorApi) GetVoteBreakdown(id types.Hash) (*definition.VoteBreakdown, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.AcceleratorContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -232,6 +236,7 @@ func (a *AcceleratorApi) GetVoteBreakdown(id types.Hash) (*definition.VoteBreakd
 }
 func (a *AcceleratorApi) GetPillarVotes(name string, hashes []types.Hash) ([]*definition.PillarVote, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.AcceleratorContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}

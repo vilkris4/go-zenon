@@ -1,7 +1,6 @@
 package pillar
 
 import (
-	"github.com/zenon-network/go-zenon/chain"
 	"github.com/zenon-network/go-zenon/chain/nom"
 	"github.com/zenon-network/go-zenon/chain/store"
 	"github.com/zenon-network/go-zenon/common/types"
@@ -11,15 +10,18 @@ import (
 	"github.com/zenon-network/go-zenon/vm/vm_context"
 )
 
-func canPerformEmbeddedUpdate(momentumStore store.Momentum, pool chain.AccountPool, contract types.Address) error {
-	store := pool.GetFrontierAccountStore(contract)
-	context := vm_context.NewAccountContext(momentumStore, store, nil)
+func canPerformEmbeddedUpdate(momentumStore store.Momentum, accountStore store.Account, contract types.Address) error {
+	context := vm_context.NewAccountContext(momentumStore, accountStore, nil)
 	return implementation.CanPerformUpdate(context)
 }
 
-func (w *worker) updateContracts(momentumStore store.Momentum) error {
+func (w *worker) updateContracts() error {
+	momentumStore := w.chain.GetFrontierMomentumStore()
+	defer w.chain.ReleaseMomentumStore(momentumStore)
 	for _, address := range types.EmbeddedWUpdate {
-		if err := canPerformEmbeddedUpdate(momentumStore, w.chain, address); err == nil {
+		accountStore := w.chain.GetFrontierAccountStore(address)
+		if err := canPerformEmbeddedUpdate(momentumStore, accountStore, address); err == nil {
+			w.chain.ReleaseAccountStore(accountStore)
 			w.log.Info("producing block to update embedded-contract", "contract-address", address)
 			if block, err := w.supervisor.GenerateFromTemplate(&nom.AccountBlock{
 				BlockType: nom.BlockTypeUserSend,
@@ -32,7 +34,9 @@ func (w *worker) updateContracts(momentumStore store.Momentum) error {
 				w.broadcaster.CreateAccountBlock(block)
 			}
 		} else if err == constants.ErrUpdateTooRecent || err == constants.ErrContractMethodNotFound {
+			w.chain.ReleaseAccountStore(accountStore)
 		} else {
+			w.chain.ReleaseAccountStore(accountStore)
 			return err
 		}
 	}

@@ -2,6 +2,9 @@ package embedded
 
 import (
 	"encoding/json"
+	"math/big"
+	"sort"
+
 	"github.com/inconshreveable/log15"
 	"github.com/zenon-network/go-zenon/chain"
 	"github.com/zenon-network/go-zenon/common"
@@ -9,8 +12,6 @@ import (
 	"github.com/zenon-network/go-zenon/rpc/api"
 	"github.com/zenon-network/go-zenon/vm/embedded/definition"
 	"github.com/zenon-network/go-zenon/zenon"
-	"math/big"
-	"sort"
 )
 
 type LiquidityApi struct {
@@ -27,6 +28,7 @@ func NewLiquidityApi(z zenon.Zenon) *LiquidityApi {
 
 func (a *LiquidityApi) GetLiquidityInfo() (*definition.LiquidityInfo, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.LiquidityContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -41,6 +43,7 @@ func (a *LiquidityApi) GetLiquidityInfo() (*definition.LiquidityInfo, error) {
 
 func (a *LiquidityApi) GetSecurityInfo() (*definition.SecurityInfoVariable, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.LiquidityContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -105,6 +108,7 @@ func (a *LiquidityApi) GetLiquidityStakeEntriesByAddress(address types.Address, 
 	}
 
 	_, context, err := api.GetFrontierContext(a.chain, types.LiquidityContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -138,6 +142,7 @@ func (a *LiquidityApi) GetFrontierRewardByPage(address types.Address, pageIndex,
 
 func (a *LiquidityApi) GetTimeChallengesInfo() (*TimeChallengesList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.LiquidityContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}

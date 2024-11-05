@@ -106,6 +106,7 @@ type mockClock struct {
 
 func (clock *mockClock) Now() time.Time {
 	store := clock.chain.GetFrontierMomentumStore()
+	defer clock.chain.ReleaseMomentumStore(store)
 	// DB didn't stop. Setting new frontier time.
 	if store != nil {
 		momentum, err := store.GetFrontierMomentum()
@@ -169,6 +170,7 @@ func (zenon *mockZenon) CreateAccountBlock(accountBlockTransaction *nom.AccountB
 
 func (zenon *mockZenon) InsertNewMomentum() {
 	store := zenon.chain.GetFrontierMomentumStore()
+	defer zenon.chain.ReleaseMomentumStore(store)
 	previousMomentum, err := store.GetFrontierMomentum()
 	common.DealWithErr(err)
 	t := previousMomentum.Timestamp.Add(time.Second * 10)
@@ -190,7 +192,9 @@ func (zenon *mockZenon) InsertNewMomentum() {
 	}
 }
 func (zenon *mockZenon) InsertMomentumsTo(targetHeight uint64) {
-	currentHeight := zenon.chain.GetFrontierMomentumStore().Identifier().Height
+	frontierStore := zenon.chain.GetFrontierMomentumStore()
+	defer zenon.chain.ReleaseMomentumStore(frontierStore)
+	currentHeight := frontierStore.Identifier().Height
 	for i := currentHeight + 1; i <= targetHeight; i += 1 {
 		zenon.InsertNewMomentum()
 	}
@@ -229,6 +233,7 @@ func (zenon *mockZenon) InsertSendBlock(template *nom.AccountBlock, expectedErro
 }
 func (zenon *mockZenon) InsertReceiveBlock(fromHeader types.AccountHeader, template *nom.AccountBlock, expectedError error, expectedVmChanges string) *nom.AccountBlock {
 	store := zenon.chain.GetFrontierAccountStore(fromHeader.Address)
+	defer zenon.chain.ReleaseAccountStore(store)
 	fromBlock, err := store.ByHeight(fromHeader.Height)
 	if fromBlock == nil {
 		zenon.t.Fatalf("failed to get from-transaction from header %v. Maybe is not cemented?", fromHeader)
@@ -272,16 +277,17 @@ func (zenon *mockZenon) EmbeddedContext(address types.Address) vm_context.Accoun
 	return vm_context.NewAccountContext(
 		momentumStore,
 		accountStore,
-		zenon.consensus.FixedPillarReader(momentumStore.Identifier()),
+		zenon.consensus.FixedPillarReader(momentumStore),
 	)
-
 }
 
 func (zenon *mockZenon) SaveLogs(logger common.Logger) *common.Expecter {
 	return common.SaveLogs(logger)
 }
 func (zenon *mockZenon) ExpectBalance(address types.Address, standard types.ZenonTokenStandard, expected int64) {
-	amount, err := zenon.chain.GetFrontierAccountStore(address).GetBalance(standard)
+	store := zenon.chain.GetFrontierAccountStore(address)
+	defer zenon.chain.ReleaseAccountStore(store)
+	amount, err := store.GetBalance(standard)
 	common.FailIfErr(zenon.t, err)
 	if amount == nil {
 		amount = big.NewInt(0)

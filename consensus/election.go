@@ -17,7 +17,9 @@ var (
 )
 
 func getMomentumBeforeTime(chain chain.Chain, t time.Time) (*nom.Momentum, error) {
-	block, err := chain.GetFrontierMomentumStore().GetMomentumBeforeTime(&t)
+	frontierStore := chain.GetFrontierMomentumStore()
+	defer chain.ReleaseMomentumStore(frontierStore)
+	block, err := frontierStore.GetMomentumBeforeTime(&t)
 	if err != nil {
 		return nil, err
 	}
@@ -133,6 +135,7 @@ func (em *electionManager) DelegationsByTick(tick uint64) ([]*types.PillarDelega
 		return nil, err
 	}
 	store := em.chain.GetMomentumStore(proofBlock.Identifier())
+	defer em.chain.ReleaseMomentumStore(store)
 
 	return store.ComputePillarDelegations()
 }
@@ -147,6 +150,7 @@ func (em *electionManager) genProofTime(tick uint64) time.Time {
 func (em *electionManager) generateProducers(proofBlock *nom.Momentum) (*storage.ElectionData, error) {
 	hashH := types.HashHeight{Hash: proofBlock.Hash, Height: proofBlock.Height}
 	store := em.chain.GetMomentumStore(proofBlock.Identifier())
+	defer em.chain.ReleaseMomentumStore(store)
 	// load from cache
 	cached, err := em.db.GetElectionResultByHash(hashH.Hash)
 	if err != nil {
@@ -193,7 +197,9 @@ func (em *electionManager) InsertMomentum(detailed *nom.DetailedMomentum) {
 
 	// tick - 1 is completed - cache election results for later use
 	_, eTime := em.ToTime(tick - 1)
-	header, err := em.chain.GetFrontierMomentumStore().GetMomentumBeforeTime(&eTime)
+	frontierStore := em.chain.GetFrontierMomentumStore()
+	defer em.chain.ReleaseMomentumStore(frontierStore)
+	header, err := frontierStore.GetMomentumBeforeTime(&eTime)
 
 	if err != nil {
 		em.log.Error("failed to GetMomentumBeforeTime", "reason", err)

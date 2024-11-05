@@ -54,6 +54,7 @@ func (a *PillarApi) GetFrontierRewardByPage(address types.Address, pageIndex, pa
 
 func (a *PillarApi) GetQsrRegistrationCost() (string, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.PillarContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return "", err
 	}
@@ -180,6 +181,7 @@ func (a *PillarApi) GetAll(pageIndex, pageSize uint32) (*PillarInfoList, error) 
 	}
 
 	m, context, err := api.GetFrontierContext(a.chain, types.PillarContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -280,6 +282,7 @@ func (a *PillarApi) GetByName(name string) (*PillarInfo, error) {
 
 func (a *PillarApi) CheckNameAvailability(name string) (bool, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.PillarContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return false, err
 	}
@@ -337,6 +340,7 @@ func (g *GetDelegatedPillarResponse) UnmarshalJSON(data []byte) error {
 
 func (a *PillarApi) GetDelegatedPillar(addr types.Address) (*GetDelegatedPillarResponse, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.PillarContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -348,7 +352,9 @@ func (a *PillarApi) GetDelegatedPillar(addr types.Address) (*GetDelegatedPillarR
 		return nil, err
 	}
 	if delegationInfo != nil {
-		balance, err := a.chain.GetFrontierMomentumStore().GetAccountStore(addr).GetBalance(types.ZnnTokenStandard)
+		frontierStore := a.chain.GetFrontierMomentumStore()
+		defer a.chain.ReleaseMomentumStore(frontierStore)
+		balance, err := frontierStore.GetAccountStore(addr).GetBalance(types.ZnnTokenStandard)
 		if err != nil {
 			return nil, err
 		}
@@ -382,6 +388,7 @@ func (a *PillarApi) GetPillarEpochHistory(pillarName string, pageIndex, pageSize
 	}
 
 	_, context, err := api.GetFrontierContext(a.chain, types.PillarContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -437,6 +444,7 @@ func (a *PillarApi) GetPillarsHistoryByEpoch(epoch uint64, pageIndex, pageSize u
 	}
 
 	_, context, err := api.GetFrontierContext(a.chain, types.PillarContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}

@@ -287,6 +287,7 @@ func (block *AccountBlock) ComputeHash() (*types.Hash, error) {
 }
 func (block *AccountBlock) prefetchToken(chain chain.Chain) error {
 	store := chain.GetFrontierMomentumStore()
+	defer chain.ReleaseMomentumStore(store)
 	if block.TokenStandard != types.ZeroTokenStandard {
 		token, err := store.GetTokenInfoByTs(block.TokenStandard)
 		if err != nil {
@@ -298,6 +299,7 @@ func (block *AccountBlock) prefetchToken(chain chain.Chain) error {
 }
 func (block *AccountBlock) prefetchPaired(chain chain.Chain) error {
 	store := chain.GetFrontierMomentumStore()
+	defer chain.ReleaseMomentumStore(store)
 	var err error
 	var paired *nom.AccountBlock
 	if block.BlockType == nom.BlockTypeGenesisReceive {
@@ -343,12 +345,13 @@ func (block *AccountBlock) prefetchPaired(chain chain.Chain) error {
 }
 func (block *AccountBlock) addConfirmationInfo(chain chain.Chain) error {
 	store := chain.GetFrontierMomentumStore()
+	defer chain.ReleaseMomentumStore(store)
 	frontier, err := store.GetFrontierMomentum()
-	confirmationHeight, err := chain.GetFrontierMomentumStore().GetBlockConfirmationHeight(block.Hash)
+	confirmationHeight, err := store.GetBlockConfirmationHeight(block.Hash)
 	if err != nil {
 		return err
 	}
-	confirmedBlock, err := chain.GetFrontierMomentumStore().GetMomentumByHeight(confirmationHeight)
+	confirmedBlock, err := store.GetMomentumByHeight(confirmationHeight)
 	if err != nil {
 		return err
 	}
@@ -384,6 +387,7 @@ func momentumListToDetailedList(chain chain.Chain, list *MomentumList) (*Detaile
 	}
 	for index, momentum := range list.List {
 		store := chain.GetFrontierMomentumStore()
+		defer chain.ReleaseMomentumStore(store)
 		m, err := store.PrefetchMomentum(momentum.Momentum)
 		if err != nil {
 			return nil, err

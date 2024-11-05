@@ -20,6 +20,7 @@ func (w *worker) generateNext(momentumStore store.Momentum, embedded types.Addre
 	defer insert.Unlock()
 
 	store := w.chain.GetFrontierAccountStore(embedded)
+	defer w.chain.ReleaseAccountStore(store)
 	toReceive := store.SequencerFront(momentumStore.GetAccountMailbox(embedded))
 
 	if toReceive == nil {

@@ -3,10 +3,11 @@ package tests
 import (
 	"encoding/base64"
 	"fmt"
-	"github.com/zenon-network/go-zenon/rpc/api/embedded"
 	"math/big"
 	"testing"
 	"time"
+
+	"github.com/zenon-network/go-zenon/rpc/api/embedded"
 
 	g "github.com/zenon-network/go-zenon/chain/genesis/mock"
 	"github.com/zenon-network/go-zenon/chain/nom"
@@ -3685,7 +3686,9 @@ func setTokensTuple(t *testing.T, z mock.MockZenon, administrator types.Address,
 	defer z.CallContract(setTokensTupleStep(administrator, customZts, znnPercentages, qsrPercentages, minAmounts)).Error(t, nil)
 	insertMomentums(z, 2)
 
-	frMom, err := z.Chain().GetFrontierMomentumStore().GetFrontierMomentum()
+	store := z.Chain().GetFrontierMomentumStore()
+	defer z.Chain().ReleaseMomentumStore(store)
+	frMom, err := store.GetFrontierMomentum()
 	common.FailIfErr(t, err)
 	z.InsertMomentumsTo(frMom.Height + uint64(constants.MomentumsPerEpoch))
 
@@ -3708,7 +3711,9 @@ func nominateGuardiansLiq(t *testing.T, z mock.MockZenon, administrator types.Ad
 	defer z.CallContract(nominateGuardiansLiqStep(administrator, guardians)).Error(t, nil)
 	insertMomentums(z, 2)
 
-	frMom, err := z.Chain().GetFrontierMomentumStore().GetFrontierMomentum()
+	store := z.Chain().GetFrontierMomentumStore()
+	defer z.Chain().ReleaseMomentumStore(store)
+	frMom, err := store.GetFrontierMomentum()
 	common.DealWithErr(err)
 	z.InsertMomentumsTo(frMom.Height + delay + 2)
 
@@ -3731,7 +3736,9 @@ func changeAdministratorLiq(t *testing.T, z mock.MockZenon, administrator types.
 	defer z.CallContract(changeAdministratorLiqStep(administrator, newAdministrator)).Error(t, nil)
 	insertMomentums(z, 2)
 
-	frMom, err := z.Chain().GetFrontierMomentumStore().GetFrontierMomentum()
+	store := z.Chain().GetFrontierMomentumStore()
+	defer z.Chain().ReleaseMomentumStore(store)
+	frMom, err := store.GetFrontierMomentum()
 	common.DealWithErr(err)
 	z.InsertMomentumsTo(frMom.Height + delay + 2)
 

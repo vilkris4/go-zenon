@@ -39,6 +39,7 @@ func (a *SporkApi) GetAll(pageIndex, pageSize uint32) (*SporkList, error) {
 	}
 
 	_, context, err := api.GetFrontierContext(a.chain, types.SporkContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}

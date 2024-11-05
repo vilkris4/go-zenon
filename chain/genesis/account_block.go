@@ -16,8 +16,11 @@ import (
 type mockStable struct {
 }
 
-func (m *mockStable) GetStableAccountDB(address types.Address) db.DB {
-	return db.NewMemDB()
+func (m *mockStable) GetStableAccountDB(address types.Address) (db.DB, db.Handle) {
+	return db.NewMemDB(), 0
+}
+
+func (m *mockStable) ReleaseStableAccountDB(handle db.Handle) {
 }
 
 func newGenesisAccountBlocks(cfg *GenesisConfig) chain.AccountPool {

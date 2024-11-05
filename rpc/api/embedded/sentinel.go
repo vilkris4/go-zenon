@@ -37,7 +37,8 @@ func NewSentinelApi(z zenon.Zenon) *SentinelApi {
 }
 
 func (api *SentinelApi) toSentinelInfo(sentinel *definition.SentinelInfo) *SentinelInfo {
-	m, _, err := rpcapi.GetFrontierContext(api.chain, types.SentinelContract)
+	m, context, err := rpcapi.GetFrontierContext(api.chain, types.SentinelContract)
+	defer context.Release(api.chain)
 	if err != nil {
 		return nil
 	}
@@ -54,6 +55,7 @@ func (api *SentinelApi) toSentinelInfo(sentinel *definition.SentinelInfo) *Senti
 
 func (api *SentinelApi) GetByOwner(owner types.Address) (*SentinelInfo, error) {
 	_, context, err := rpcapi.GetFrontierContext(api.chain, types.SentinelContract)
+	defer context.Release(api.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -69,6 +71,7 @@ func (api *SentinelApi) GetAllActive(pageIndex, pageSize uint32) (*SentinelInfoL
 		return nil, rpcapi.ErrPageSizeParamTooBig
 	}
 	_, context, err := rpcapi.GetFrontierContext(api.chain, types.SentinelContract)
+	defer context.Release(api.chain)
 	if err != nil {
 		return nil, err
 	}

@@ -44,6 +44,7 @@ func GetFrontierContext(c chain.Chain, addr types.Address) (*nom.Momentum, vm_co
 
 func checkTokenIdValid(chain chain.Chain, ts *types.ZenonTokenStandard) error {
 	store := chain.GetFrontierMomentumStore()
+	defer chain.ReleaseMomentumStore(store)
 	if ts != nil && (*ts) != types.ZeroTokenStandard {
 		tokenStandard, err := store.GetTokenInfoByTs(*ts)
 		if err != nil {

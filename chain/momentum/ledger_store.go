@@ -14,6 +14,7 @@ import (
 )
 
 type momentumStore struct {
+	handle db.Handle
 	store.Genesis
 	db.DB
 }
@@ -26,14 +27,15 @@ func getAccountMailboxPrefix(address types.Address) []byte {
 }
 
 func (ms *momentumStore) Snapshot() store.Momentum {
-	return NewStore(ms.Genesis, ms.DB.Snapshot())
+	return NewStore(ms.Genesis, ms.DB.Snapshot(), ms.handle)
 }
 
-func (ms *momentumStore) GetAccountDB(address types.Address) db.DB {
-	return ms.DB.Subset(getAccountStorePrefix(address)).Snapshot()
+func (ms *momentumStore) GetAccountDB(address types.Address) (db.DB, db.Handle) {
+	return ms.DB.Subset(getAccountStorePrefix(address)).Snapshot(), ms.handle
 }
 func (ms *momentumStore) GetAccountStore(address types.Address) store.Account {
-	return account.NewAccountStore(address, ms.GetAccountDB(address))
+	db, handle := ms.GetAccountDB(address)
+	return account.NewAccountStore(address, db, handle)
 }
 
 func (ms *momentumStore) getAccountMailbox(address types.Address) store.AccountMailbox {
@@ -125,12 +127,16 @@ func (ms *momentumStore) Identifier() types.HashHeight {
 		return frontier.Identifier()
 	}
 }
+func (ms *momentumStore) Handle() db.Handle {
+	return ms.handle
+}
 
-func NewStore(genesis store.Genesis, db db.DB) store.Momentum {
+func NewStore(genesis store.Genesis, db db.DB, handle db.Handle) store.Momentum {
 	if db == nil {
 		panic("momentum store can't operate with nil db")
 	}
 	return &momentumStore{
+		handle:  handle,
 		Genesis: genesis,
 		DB:      db,
 	}

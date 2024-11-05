@@ -35,6 +35,8 @@ type Account interface {
 	Apply(patch db.Patch) error
 	Snapshot() Account
 	Changes() (db.Patch, error)
+
+	Handle() db.Handle
 }
 
 type AccountMailbox interface {

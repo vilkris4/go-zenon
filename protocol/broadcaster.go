@@ -39,6 +39,7 @@ func (b *broadcaster) CreateMomentum(momentumTransaction *nom.MomentumTransactio
 	}
 
 	store := b.chain.GetFrontierMomentumStore()
+	defer b.chain.ReleaseMomentumStore(store)
 	detailed, err := store.PrefetchMomentum(momentumTransaction.Momentum)
 	if err != nil {
 		b.log.Error("failed to insert own momentum", "reason", err)

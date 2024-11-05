@@ -26,20 +26,23 @@ var (
 )
 
 type Stable interface {
-	GetStableAccountDB(address types.Address) db.DB
+	GetStableAccountDB(address types.Address) (db.DB, db.Handle)
+	ReleaseStableAccountDB(handle db.Handle)
 }
 
 type accountPool struct {
-	log      log15.Logger
-	stable   Stable
-	managers map[types.Address]db.Manager
-	changes  sync.Mutex
+	log           log15.Logger
+	stable        Stable
+	managers      map[types.Address]db.MemDbManager
+	changes       sync.Mutex
+	stableDbLocks map[db.Handle]bool
 }
 
-func (ap *accountPool) getAccountManager(address types.Address) db.Manager {
+func (ap *accountPool) getAccountManager(address types.Address) db.MemDbManager {
 	manager := ap.managers[address]
 	if manager == nil {
-		manager = db.NewMemDBManager(ap.stable.GetStableAccountDB(address))
+		stable, handle := ap.stable.GetStableAccountDB(address)
+		manager = db.NewMemDBManager(stable, handle)
 		ap.managers[address] = manager
 	}
 	return manager
@@ -52,6 +55,7 @@ func (ap *accountPool) canRollback(block *nom.AccountBlock) error {
 	previous := block.Previous()
 
 	stable := ap.getStableAccountStore(address)
+	defer ap.releaseStableAccountStore(stable)
 	stableIdentifier := stable.Identifier()
 
 	// can't insert at all since it's too old
@@ -168,6 +172,35 @@ func (ap *accountPool) GetPatch(address types.Address, identifier types.HashHeig
 
 	return ap.getAccountManager(address).GetPatch(identifier)
 }
+
+func (ap *accountPool) Clear() {
+	ap.changes.Lock()
+	defer ap.changes.Unlock()
+	ap.log.Debug("cleaning up account pool, address count: %d", len(ap.managers))
+
+	addresses := make([]types.Address, 0, len(ap.managers))
+	for address := range ap.managers {
+		addresses = append(addresses, address)
+	}
+
+	for _, address := range addresses {
+		ap.stable.ReleaseStableAccountDB(ap.managers[address].StableHandle())
+		ap.managers[address].Stop()
+		delete(ap.managers, address)
+	}
+
+	ap.log.Debug("account pool clean up done")
+}
+
+func (ap *accountPool) ReleaseAccountStore(store store.Account) {
+	ap.changes.Lock()
+	defer ap.changes.Unlock()
+	delete(ap.stableDbLocks, store.Handle())
+	if ap.managers[*store.Address()] == nil {
+		ap.stable.ReleaseStableAccountDB(store.Handle())
+	}
+}
+
 func (ap *accountPool) GetAccountStore(address types.Address, identifier types.HashHeight) store.Account {
 	ap.changes.Lock()
 	defer ap.changes.Unlock()
@@ -178,8 +211,10 @@ func (ap *accountPool) GetAccountStore(address types.Address, identifier types.H
 		return stable
 	} else if stableIdentifier.Height > identifier.Height {
 		ap.log.Info("unable to get account store", "address", address, "stable-identifier", stableIdentifier, "reason", "older than most stable account")
+		ap.releaseStableAccountStore(stable)
 		return nil
 	}
+	ap.releaseStableAccountStore(stable)
 
 	manager := ap.getAccountManager(address)
 	accountDb := manager.Get(identifier)
@@ -188,20 +223,37 @@ func (ap *accountPool) GetAccountStore(address types.Address, identifier types.H
 		ap.log.Info("unable to get account store", "address", address, "frontier-identifier", frontier, "reason", "missing-db")
 		return nil
 	}
-	return account.NewAccountStore(address, accountDb)
+	store := account.NewAccountStore(address, accountDb, manager.StableHandle())
+	ap.stableDbLocks[store.Handle()] = true
+	return store
 }
 func (ap *accountPool) GetFrontierAccountStore(address types.Address) store.Account {
 	ap.changes.Lock()
 	defer ap.changes.Unlock()
+	if ap.hasUncommittedState(address) {
+		store := ap.getFrontierAccountStore(address)
+		ap.stableDbLocks[store.Handle()] = true
+		return store
+	} else {
+		return ap.getStableAccountStore(address)
+	}
+}
 
-	return ap.getFrontierAccountStore(address)
+func (ap *accountPool) hasUncommittedState(address types.Address) bool {
+	_, ok := ap.managers[address]
+	return ok
 }
 
 func (ap *accountPool) getStableAccountStore(address types.Address) store.Account {
-	return account.NewAccountStore(address, db.NewMemDBManager(ap.stable.GetStableAccountDB(address)).Frontier())
+	manager := db.NewMemDBManager(ap.stable.GetStableAccountDB(address))
+	return account.NewAccountStore(address, manager.Frontier(), manager.StableHandle())
+}
+func (ap *accountPool) releaseStableAccountStore(store store.Account) {
+	ap.stable.ReleaseStableAccountDB(store.Handle())
 }
 func (ap *accountPool) getFrontierAccountStore(address types.Address) store.Account {
-	return account.NewAccountStore(address, ap.getAccountManager(address).Frontier())
+	manager := ap.getAccountManager(address)
+	return account.NewAccountStore(address, manager.Frontier(), manager.StableHandle())
 }
 
 func (ap *accountPool) InsertMomentum(detailed *nom.DetailedMomentum) {
@@ -216,7 +268,7 @@ func (ap *accountPool) DeleteMomentum(*nom.DetailedMomentum) {
 	ap.changes.Lock()
 	defer ap.changes.Unlock()
 
-	ap.managers = make(map[types.Address]db.Manager)
+	ap.managers = make(map[types.Address]db.MemDbManager)
 }
 func (ap *accountPool) rebuild(detailed *nom.DetailedMomentum) error {
 	addresses := make([]types.Address, 0, len(ap.managers))
@@ -232,23 +284,35 @@ func (ap *accountPool) rebuild(detailed *nom.DetailedMomentum) error {
 		uncommitted := make([]*nom.AccountBlock, 0)
 		oldManager := ap.managers[address]
 
-		stable := account.NewAccountStore(address, ap.stable.GetStableAccountDB(address))
-		uncommittedStore := account.NewAccountStore(address, oldManager.Frontier())
+		stableDB, stableHandle := ap.stable.GetStableAccountDB(address)
+		stable := account.NewAccountStore(address, stableDB, stableHandle)
+		uncommittedStore := account.NewAccountStore(address, oldManager.Frontier(), oldManager.StableHandle())
 		for i := stable.Identifier().Height + 1; i <= uncommittedStore.Identifier().Height; i += 1 {
 			block, err := uncommittedStore.ByHeight(i)
-			common.DealWithErr(err)
+			if err != nil {
+				ap.stable.ReleaseStableAccountDB(stableHandle)
+				common.DealWithErr(err)
+			}
 			uncommitted = append(uncommitted, block)
 		}
+		ap.stable.ReleaseStableAccountDB(stableHandle)
 
 		delete(ap.managers, address)
 
+		_, isOldDbLocked := ap.stableDbLocks[oldManager.StableHandle()]
+
 		if len(uncommitted) == 0 {
 			log.Debug("no uncommitted changes")
+			if !isOldDbLocked {
+				ap.stable.ReleaseStableAccountDB(oldManager.StableHandle())
+			}
+			oldManager.Stop()
 			continue
 		}
 
 		log.Debug("staring applying blocks", "num-uncommitted", len(uncommitted))
-		manager := db.NewMemDBManager(ap.stable.GetStableAccountDB(address))
+		stableDB, stableHandle = ap.stable.GetStableAccountDB(address)
+		manager := db.NewMemDBManager(stableDB, stableHandle)
 		for _, block := range uncommitted {
 			patch := oldManager.GetPatch(block.Identifier())
 			err := manager.Add(&nom.AccountBlockTransaction{
@@ -256,11 +320,21 @@ func (ap *accountPool) rebuild(detailed *nom.DetailedMomentum) error {
 				Changes: patch,
 			})
 			if err != nil {
+				ap.stable.ReleaseStableAccountDB(stableHandle)
+				if !isOldDbLocked {
+					ap.stable.ReleaseStableAccountDB(oldManager.StableHandle())
+				}
+				oldManager.Stop()
 				return errors.Errorf("account pool rebuild error. Unable to re-apply block %v. Reason %v", block.Header(), err)
 			}
 		}
-		ap.managers[address] = manager
 
+		if !isOldDbLocked {
+			ap.stable.ReleaseStableAccountDB(oldManager.StableHandle())
+		}
+		oldManager.Stop()
+
+		ap.managers[address] = manager
 		log.Debug("successfully rebuild", "num-uncommitted", len(uncommitted))
 	}
 
@@ -308,6 +382,7 @@ func (ap *accountPool) getUncommittedAccountBlocksByAddress(address types.Addres
 	blocks := make([]*nom.AccountBlock, 0)
 
 	stable := ap.getStableAccountStore(address)
+	defer ap.releaseStableAccountStore(stable)
 	frontier := ap.getFrontierAccountStore(address)
 	for i := stable.Identifier().Height + 1; i <= frontier.Identifier().Height; i += 1 {
 		block, err := frontier.ByHeight(i)
@@ -320,9 +395,10 @@ func (ap *accountPool) getUncommittedAccountBlocksByAddress(address types.Addres
 
 func newAccountPool(stable Stable) *accountPool {
 	return &accountPool{
-		log:      common.ChainLogger.New("module", "account-pool"),
-		stable:   stable,
-		managers: make(map[types.Address]db.Manager),
+		log:           common.ChainLogger.New("module", "account-pool"),
+		stable:        stable,
+		managers:      make(map[types.Address]db.MemDbManager),
+		stableDbLocks: make(map[db.Handle]bool),
 	}
 }
 func NewAccountPool(stable Stable) AccountPool {

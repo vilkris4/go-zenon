@@ -63,7 +63,9 @@ func (cache *consensusCache) update() {
 	defer cache.releaseUpdate()
 	startTime := common.Clock.Now()
 
-	frontierMomentum, err := cache.chain.GetFrontierMomentumStore().GetFrontierMomentum()
+	frontierStore := cache.chain.GetFrontierMomentumStore()
+	defer cache.chain.ReleaseMomentumStore(frontierStore)
+	frontierMomentum, err := frontierStore.GetFrontierMomentum()
 	if err != nil {
 		cache.log.Error("failed to get frontier momentum", "reason", err)
 		return
@@ -73,7 +75,7 @@ func (cache *consensusCache) update() {
 		return
 	}
 
-	reader := cache.consensus.FixedPillarReader(frontierMomentum.Identifier())
+	reader := cache.consensus.FixedPillarReader(frontierStore)
 	epoch := reader.EpochTicker().ToTick(*frontierMomentum.Timestamp)
 
 	cache.log.Debug("updating rpc consensus cache", "identifier", frontierMomentum.Identifier(), "epoch", epoch)

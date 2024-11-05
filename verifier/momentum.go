@@ -44,6 +44,7 @@ func (mv *momentumVerifier) getContext(momentum *nom.Momentum) (store.Momentum, 
 }
 func (mv *momentumVerifier) Momentum(detailed *nom.DetailedMomentum) error {
 	momentumStore, err := mv.getContext(detailed.Momentum)
+	defer mv.chain.ReleaseMomentumStore(momentumStore)
 	if err != nil {
 		return err
 	}

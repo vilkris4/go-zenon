@@ -49,11 +49,13 @@ type Momentum interface {
 	ComputePillarDelegations() ([]*types.PillarDelegationDetail, error)
 
 	GetAccountStore(address types.Address) Account
-	GetAccountDB(address types.Address) db.DB
+	GetAccountDB(address types.Address) (db.DB, db.Handle)
 	GetAccountMailbox(address types.Address) AccountMailbox
 
 	Snapshot() Momentum
 	Changes() (db.Patch, error)
 
 	AddAccountBlockTransaction(header types.AccountHeader, patch db.Patch) error
+
+	Handle() db.Handle
 }

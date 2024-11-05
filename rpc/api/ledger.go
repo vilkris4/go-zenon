@@ -57,7 +57,9 @@ func (l *LedgerApi) PublishRawTransaction(block *AccountBlock) error {
 	if err := checkTokenIdValid(l.chain, &lb.TokenStandard); err != nil {
 		return err
 	}
-	m, err := l.chain.GetFrontierMomentumStore().GetFrontierMomentum()
+	frontierStore := l.chain.GetFrontierMomentumStore()
+	defer l.chain.ReleaseMomentumStore(frontierStore)
+	m, err := frontierStore.GetFrontierMomentum()
 	if m == nil {
 		return errors.New("failed to get latest momentum")
 	}
@@ -97,6 +99,7 @@ func (l *LedgerApi) GetUnconfirmedBlocksByAddress(address types.Address, pageInd
 // AccountBlocks
 func (l *LedgerApi) GetFrontierAccountBlock(address types.Address) (*AccountBlock, error) {
 	accountStore := l.chain.GetFrontierAccountStore(address)
+	defer l.chain.ReleaseAccountStore(accountStore)
 	block, err := accountStore.Frontier()
 	if err != nil {
 		return nil, err
@@ -108,6 +111,7 @@ func (l *LedgerApi) GetFrontierAccountBlock(address types.Address) (*AccountBloc
 }
 func (l *LedgerApi) GetAccountBlockByHash(blockHash types.Hash) (*AccountBlock, error) {
 	momentumStore := l.chain.GetFrontierMomentumStore()
+	defer l.chain.ReleaseMomentumStore(momentumStore)
 	block, err := momentumStore.GetAccountBlockByHash(blockHash)
 	if err != nil {
 		l.log.Error("GetAccountBlockByHash failed", "reason", err, "method-called", "momentumStore.GetAccountBlockByHash")
@@ -128,6 +132,7 @@ func (l *LedgerApi) GetAccountBlocksByHeight(address types.Address, height, coun
 	}
 
 	accountStore := l.chain.GetFrontierAccountStore(address)
+	defer l.chain.ReleaseAccountStore(accountStore)
 	frontier, err := accountStore.Frontier()
 	if err != nil {
 		l.log.Error("GetAccountBlocksByHeight failed", "reason", err, "method-called", "accountStore.Frontier")
@@ -163,6 +168,7 @@ func (l *LedgerApi) GetAccountBlocksByPage(address types.Address, pageIndex, pag
 	}
 
 	accountStore := l.chain.GetFrontierAccountStore(address)
+	defer l.chain.ReleaseAccountStore(accountStore)
 	frontier, err := accountStore.Frontier()
 	if err != nil {
 		l.log.Error("GetAccountBlocksByHeight failed", "reason", err, "method-called", "accountStore.Frontier")
@@ -204,7 +210,9 @@ func (l *LedgerApi) GetAccountInfoByAddress(address types.Address) (*AccountInfo
 	l.log.Info("GetAccountInfoByAddress")
 
 	momentumStore := l.chain.GetFrontierMomentumStore()
+	defer l.chain.ReleaseMomentumStore(momentumStore)
 	accountStore := l.chain.GetFrontierAccountStore(address)
+	defer l.chain.ReleaseAccountStore(accountStore)
 	frontierAccountBlock, err := accountStore.Frontier()
 	if err != nil {
 		l.log.Error("GetFrontierAccountBlock failed, error is "+err.Error(), "method", "GetAccountInfoByAddress")
@@ -252,18 +260,20 @@ func (l *LedgerApi) GetUnreceivedBlocksByAddress(address types.Address, pageInde
 	}
 
 	accountStore := l.chain.GetFrontierAccountStore(address)
-	hashList, err := l.chain.GetFrontierMomentumStore().GetAccountMailbox(address).GetUnreceivedAccountBlockHashes(unreceivedQuerySize)
+	defer l.chain.ReleaseAccountStore(accountStore)
+	frontierStore := l.chain.GetFrontierMomentumStore()
+	defer l.chain.ReleaseMomentumStore(frontierStore)
+	hashList, err := frontierStore.GetAccountMailbox(address).GetUnreceivedAccountBlockHashes(unreceivedQuerySize)
 	if err != nil {
 		return nil, err
 	}
 
-	ledgerFrontier := l.chain.GetFrontierMomentumStore()
 	blockList := make([]*nom.AccountBlock, 0, len(hashList))
 	for _, hash := range hashList {
 		if accountStore.IsReceived(hash) {
 			continue
 		}
-		block, err := ledgerFrontier.GetAccountBlockByHash(hash)
+		block, err := frontierStore.GetAccountBlockByHash(hash)
 
 		if err != nil {
 			return nil, err
@@ -293,7 +303,9 @@ func (l *LedgerApi) GetUnreceivedBlocksByAddress(address types.Address, pageInde
 
 // Momentum
 func (l *LedgerApi) GetFrontierMomentum() (*Momentum, error) {
-	momentum, err := l.chain.GetFrontierMomentumStore().GetFrontierMomentum()
+	frontierStore := l.chain.GetFrontierMomentumStore()
+	defer l.chain.ReleaseMomentumStore(frontierStore)
+	momentum, err := frontierStore.GetFrontierMomentum()
 	if err != nil {
 		return nil, err
 	}
@@ -301,7 +313,9 @@ func (l *LedgerApi) GetFrontierMomentum() (*Momentum, error) {
 }
 func (l *LedgerApi) GetMomentumBeforeTime(timestamp int64) (*Momentum, error) {
 	currentTime := time.Unix(timestamp, 0)
-	momentum, err := l.chain.GetFrontierMomentumStore().GetMomentumBeforeTime(&currentTime)
+	frontierStore := l.chain.GetFrontierMomentumStore()
+	defer l.chain.ReleaseMomentumStore(frontierStore)
+	momentum, err := frontierStore.GetMomentumBeforeTime(&currentTime)
 	if err != nil || momentum == nil {
 		return nil, err
 	}
@@ -309,7 +323,9 @@ func (l *LedgerApi) GetMomentumBeforeTime(timestamp int64) (*Momentum, error) {
 	return ledgerMomentumToRpc(momentum)
 }
 func (l *LedgerApi) GetMomentumByHash(hash types.Hash) (*Momentum, error) {
-	block, err := l.chain.GetFrontierMomentumStore().GetMomentumByHash(hash)
+	frontierStore := l.chain.GetFrontierMomentumStore()
+	defer l.chain.ReleaseMomentumStore(frontierStore)
+	block, err := frontierStore.GetMomentumByHash(hash)
 	if err != nil {
 		l.log.Error("GetMomentumByHash failed, error is "+err.Error(), "method", "GetMomentumByHash")
 		return nil, err
@@ -325,6 +341,7 @@ func (l *LedgerApi) GetMomentumsByHeight(height, count uint64) (*MomentumList, e
 	}
 
 	momentumStore := l.chain.GetFrontierMomentumStore()
+	defer l.chain.ReleaseMomentumStore(momentumStore)
 	frontier, err := momentumStore.GetFrontierMomentum()
 	if err != nil {
 		l.log.Error("GetMomentumsByHeight failed", "reason", err, "method-called", "momentumStore.GetFrontierMomentum")
@@ -354,6 +371,7 @@ func (l *LedgerApi) GetMomentumsByPage(pageIndex, pageSize uint32) (*MomentumLis
 	}
 
 	momentumStore := l.chain.GetFrontierMomentumStore()
+	defer l.chain.ReleaseMomentumStore(momentumStore)
 	frontier, err := momentumStore.GetFrontierMomentum()
 	if err != nil {
 		l.log.Error("GetMomentumsByPage failed", "reason", err, "method-called", "momentumStore.GetFrontierMomentum")

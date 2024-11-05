@@ -40,6 +40,7 @@ func (c *momentumPool) AddMomentumTransaction(insertLocker sync.Locker, transact
 	}
 
 	store := c.getFrontierStore()
+	defer c.releaseMomentumStore(store)
 	detailed, err := store.PrefetchMomentum(momentum)
 	if err != nil {
 		return err
@@ -50,6 +51,7 @@ func (c *momentumPool) AddMomentumTransaction(insertLocker sync.Locker, transact
 	c.changes.Lock()
 
 	frontier := c.getFrontierStore()
+	defer c.releaseMomentumStore(frontier)
 	if justNow, unimplemented, err := GotAllActiveSporksImplemented(frontier); err != nil {
 		return err
 	} else if unimplemented != nil {
@@ -84,6 +86,7 @@ func (c *momentumPool) RollbackTo(insertLocker sync.Locker, identifier types.Has
 	defer c.changes.Unlock()
 	c.log.Info("preparing to rollback momentums", "identifier", identifier)
 	store := c.getFrontierStore()
+	defer c.releaseMomentumStore(store)
 	momentum, err := store.GetMomentumByHeight(identifier.Height)
 	if err != nil {
 		return err
@@ -96,14 +99,17 @@ func (c *momentumPool) RollbackTo(insertLocker sync.Locker, identifier types.Has
 		store := c.getFrontierStore()
 		frontier, err := store.GetFrontierMomentum()
 		if err != nil {
+			c.releaseMomentumStore(store)
 			return err
 		}
 
 		if frontier.Height == identifier.Height {
+			c.releaseMomentumStore(store)
 			break
 		}
 		c.log.Info("rollbacking", "momentum-identifier", frontier.Identifier())
 		detailed, err := store.PrefetchMomentum(frontier)
+		c.releaseMomentumStore(store)
 		if err != nil {
 			return err
 		}
@@ -152,10 +158,11 @@ func GotAllActiveSporksImplemented(store store.Momentum) (justNow *definition.Sp
 }
 
 func (c *momentumPool) getFrontierStore() store.Momentum {
-	if momentumDB := c.chainManager.Frontier(); momentumDB == nil {
+	momentumDB, handle := c.chainManager.Frontier()
+	if momentumDB == nil {
 		return nil
 	} else {
-		return momentum.NewStore(c.genesis, momentumDB)
+		return momentum.NewStore(c.genesis, momentumDB, handle)
 	}
 }
 func (c *momentumPool) GetFrontierMomentumStore() store.Momentum {
@@ -166,17 +173,33 @@ func (c *momentumPool) GetFrontierMomentumStore() store.Momentum {
 func (c *momentumPool) GetMomentumStore(identifier types.HashHeight) store.Momentum {
 	c.changes.Lock()
 	defer c.changes.Unlock()
-	momentumDB := c.chainManager.Get(identifier)
+	momentumDB, handle := c.chainManager.Get(identifier)
 	if momentumDB == nil {
 		return nil
 	}
 
-	return momentum.NewStore(c.genesis, momentumDB)
+	return momentum.NewStore(c.genesis, momentumDB, handle)
 }
-func (c *momentumPool) GetStableAccountDB(address types.Address) db.DB {
+func (c *momentumPool) GetStableAccountDB(address types.Address) (db.DB, db.Handle) {
 	c.changes.Lock()
 	defer c.changes.Unlock()
 	return c.getFrontierStore().GetAccountDB(address)
+}
+
+func (c *momentumPool) ReleaseStableAccountDB(handle db.Handle) {
+	c.changes.Lock()
+	defer c.changes.Unlock()
+	c.chainManager.Release(handle)
+}
+
+func (c *momentumPool) ReleaseMomentumStore(store store.Momentum) {
+	c.changes.Lock()
+	defer c.changes.Unlock()
+	c.releaseMomentumStore(store)
+}
+
+func (c *momentumPool) releaseMomentumStore(store store.Momentum) {
+	c.chainManager.Release(store.Handle())
 }
 
 func NewMomentumPool(chainManager db.Manager, genesis store.Genesis) *momentumPool {

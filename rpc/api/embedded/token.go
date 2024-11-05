@@ -40,6 +40,7 @@ func (a *TokenAPI) GetAll(pageIndex, pageSize uint32) (*TokenList, error) {
 	}
 
 	_, context, err := api.GetFrontierContext(a.chain, types.TokenContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -60,6 +61,7 @@ func (a *TokenAPI) GetByOwner(owner types.Address, pageIndex, pageSize uint32) (
 	}
 
 	_, context, err := api.GetFrontierContext(a.chain, types.TokenContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -84,6 +86,7 @@ func (a *TokenAPI) GetByOwner(owner types.Address, pageIndex, pageSize uint32) (
 }
 func (a *TokenAPI) GetByZts(zts types.ZenonTokenStandard) (*api.Token, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.TokenContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}

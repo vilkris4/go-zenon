@@ -2,13 +2,14 @@ package embedded
 
 import (
 	"encoding/json"
+	"reflect"
+	"sort"
+
 	"github.com/inconshreveable/log15"
 	"github.com/pkg/errors"
 	"github.com/zenon-network/go-zenon/chain/nom"
 	"github.com/zenon-network/go-zenon/vm/constants"
 	"github.com/zenon-network/go-zenon/vm/embedded/implementation"
-	"reflect"
-	"sort"
 
 	"github.com/zenon-network/go-zenon/chain"
 	"github.com/zenon-network/go-zenon/common"
@@ -33,6 +34,7 @@ func NewBridgeApi(z zenon.Zenon) *BridgeApi {
 
 func (a *BridgeApi) GetBridgeInfo() (*definition.BridgeInfoVariable, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -47,6 +49,7 @@ func (a *BridgeApi) GetBridgeInfo() (*definition.BridgeInfoVariable, error) {
 
 func (a *BridgeApi) GetSecurityInfo() (*definition.SecurityInfoVariable, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -61,6 +64,7 @@ func (a *BridgeApi) GetSecurityInfo() (*definition.SecurityInfoVariable, error) 
 
 func (a *BridgeApi) GetOrchestratorInfo() (*definition.OrchestratorInfo, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -80,6 +84,7 @@ type TimeChallengesList struct {
 
 func (a *BridgeApi) GetTimeChallengesInfo() (*TimeChallengesList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -105,6 +110,7 @@ func (a *BridgeApi) GetTimeChallengesInfo() (*TimeChallengesList, error) {
 
 func (a *BridgeApi) GetNetworkInfo(networkClass uint32, chainId uint32) (*definition.NetworkInfo, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -123,6 +129,7 @@ func (a *BridgeApi) GetAllNetworks(pageIndex, pageSize uint32) (*NetworkInfoList
 	}
 
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -227,6 +234,7 @@ func (w *WrapTokenRequest) UnmarshalJSON(data []byte) error {
 
 func (a *BridgeApi) getToken(zts types.ZenonTokenStandard) (*api.Token, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.TokenContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -265,6 +273,7 @@ func (a *BridgeApi) getConfirmationsToFinality(wrapTokenRequest definition.WrapT
 
 func (a *BridgeApi) GetWrapTokenRequestById(id types.Hash) (*WrapTokenRequest, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -302,6 +311,7 @@ type WrapTokenRequestList struct {
 
 func (a *BridgeApi) GetAllWrapTokenRequests(pageIndex, pageSize uint32) (*WrapTokenRequestList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -343,6 +353,7 @@ func (a *BridgeApi) GetAllWrapTokenRequests(pageIndex, pageSize uint32) (*WrapTo
 
 func (a *BridgeApi) GetAllWrapTokenRequestsByToAddress(toAddress string, pageIndex, pageSize uint32) (*WrapTokenRequestList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -394,6 +405,7 @@ func (a *BridgeApi) GetAllWrapTokenRequestsByToAddress(toAddress string, pageInd
 
 func (a *BridgeApi) GetAllWrapTokenRequestsByToAddressNetworkClassAndChainId(toAddress string, networkClass, chainId uint32, pageIndex, pageSize uint32) (*WrapTokenRequestList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -442,6 +454,7 @@ func (a *BridgeApi) GetAllWrapTokenRequestsByToAddressNetworkClassAndChainId(toA
 
 func (a *BridgeApi) GetAllUnsignedWrapTokenRequests(pageIndex, pageSize uint32) (*WrapTokenRequestList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -550,6 +563,7 @@ type UnwrapTokenRequestList struct {
 
 func (a *BridgeApi) GetUnwrapTokenRequestByHashAndLog(txHash types.Hash, logIndex uint32) (*UnwrapTokenRequest, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -580,6 +594,7 @@ func (a *BridgeApi) GetUnwrapTokenRequestByHashAndLog(txHash types.Hash, logInde
 
 func (a *BridgeApi) GetAllUnwrapTokenRequests(pageIndex, pageSize uint32) (*UnwrapTokenRequestList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -619,6 +634,7 @@ func (a *BridgeApi) GetAllUnwrapTokenRequests(pageIndex, pageSize uint32) (*Unwr
 
 func (a *BridgeApi) GetAllUnwrapTokenRequestsByToAddress(toAddress string, pageIndex, pageSize uint32) (*UnwrapTokenRequestList, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}
@@ -671,6 +687,7 @@ func (a *BridgeApi) GetAllUnwrapTokenRequestsByToAddress(toAddress string, pageI
 
 func (a *BridgeApi) GetFeeTokenPair(zts types.ZenonTokenStandard) (*definition.ZtsFeesInfo, error) {
 	_, context, err := api.GetFrontierContext(a.chain, types.BridgeContract)
+	defer context.Release(a.chain)
 	if err != nil {
 		return nil, err
 	}

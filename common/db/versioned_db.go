@@ -1,6 +1,7 @@
 package db
 
 import (
+	"fmt"
 	"runtime"
 	"sync"
 
@@ -12,6 +13,8 @@ import (
 	"github.com/zenon-network/go-zenon/common"
 	"github.com/zenon-network/go-zenon/common/types"
 )
+
+type Handle uint64
 
 const (
 	l1CacheSize                  = 400
@@ -44,6 +47,20 @@ func getOpenFilesCacheCapacity() int {
 }
 
 type Manager interface {
+	Frontier() (DB, Handle)
+	Get(types.HashHeight) (DB, Handle)
+	GetPatch(identifier types.HashHeight) Patch
+
+	Add(Transaction) error
+	Pop() error
+
+	Stop() error
+	Location() string
+
+	Release(handle Handle)
+}
+
+type MemDbManager interface {
 	Frontier() DB
 	Get(types.HashHeight) DB
 	GetPatch(identifier types.HashHeight) Patch
@@ -53,10 +70,13 @@ type Manager interface {
 
 	Stop() error
 	Location() string
+
+	StableHandle() Handle
 }
 
 type memdbManager struct {
 	stableDB           DB
+	stableHandle       Handle
 	stableIdentifier   types.HashHeight
 	frontierIdentifier types.HashHeight
 	previous           map[types.HashHeight]types.HashHeight
@@ -66,16 +86,21 @@ type memdbManager struct {
 	changes sync.Mutex
 }
 
-func NewMemDBManager(rawDB DB) Manager {
+func NewMemDBManager(rawDB DB, rawDbHandle Handle) MemDbManager {
 	frontierIdentifier := GetFrontierIdentifier(rawDB)
 	return &memdbManager{
 		stableDB:           rawDB,
+		stableHandle:       rawDbHandle,
 		stableIdentifier:   frontierIdentifier,
 		frontierIdentifier: frontierIdentifier,
 		previous:           map[types.HashHeight]types.HashHeight{},
 		versions:           map[types.HashHeight]DB{frontierIdentifier: rawDB},
 		patches:            map[types.HashHeight]Patch{},
 	}
+}
+
+func (m *memdbManager) StableHandle() Handle {
+	return m.stableHandle
 }
 
 func (m *memdbManager) Frontier() DB {
@@ -185,12 +210,14 @@ type rollbackCache struct {
 }
 
 type ldbManager struct {
-	location string
-	l1Cache  *lru.Cache
-	l2Cache  *lru.Cache
-	ldb      *leveldb.DB
-	changes  sync.Mutex
-	stopped  bool
+	location    string
+	l1Cache     *lru.Cache
+	l2Cache     *lru.Cache
+	ldb         *leveldb.DB
+	changes     sync.Mutex
+	stopped     bool
+	handleIndex uint64
+	snapshots   map[Handle]*leveldb.Snapshot
 }
 
 func NewLevelDBManager(dir string) Manager {
@@ -202,47 +229,87 @@ func NewLevelDBManager(dir string) Manager {
 	l2Cache, err := lru.New(l2CacheSize)
 	common.DealWithErr(err)
 	return &ldbManager{
-		location: dir,
-		l1Cache:  l1Cache,
-		l2Cache:  l2Cache,
-		ldb:      ldb,
+		location:    dir,
+		l1Cache:     l1Cache,
+		l2Cache:     l2Cache,
+		ldb:         ldb,
+		handleIndex: 1,
+		snapshots:   make(map[Handle]*leveldb.Snapshot),
 	}
 }
 
-func (m *ldbManager) Frontier() DB {
-	m.changes.Lock()
-	defer m.changes.Unlock()
-	if m.stopped {
-		return nil
+func (m *ldbManager) newHandle() Handle {
+	m.handleIndex++
+	if m.handleIndex == 0 {
+		m.handleIndex++
 	}
-	snapshot, _ := m.ldb.GetSnapshot()
-	return NewLevelDBSnapshotWrapper(snapshot).Subset(frontierByte)
+	if m.handleIndex%100000 == 0 {
+		fmt.Printf("Handle index is %d\n", m.handleIndex)
+	}
+	return Handle(m.handleIndex)
 }
-func (m *ldbManager) Get(identifier types.HashHeight) DB {
+
+func (m *ldbManager) newSnapshot() (*leveldb.Snapshot, Handle) {
+	snapshot, _ := m.ldb.GetSnapshot()
+	handle := m.newHandle()
+	m.snapshots[handle] = snapshot
+	return snapshot, handle
+}
+
+func (m *ldbManager) release(handle Handle) {
+	if snapshot, ok := m.snapshots[handle]; ok {
+		snapshot.Release()
+		delete(m.snapshots, handle)
+		return
+	}
+}
+
+func (m *ldbManager) Release(handle Handle) {
 	m.changes.Lock()
 	defer m.changes.Unlock()
 	if m.stopped {
-		return nil
+		return
 	}
-	snapshot, _ := m.ldb.GetSnapshot()
+	m.release(handle)
+}
+
+func (m *ldbManager) Frontier() (DB, Handle) {
+	m.changes.Lock()
+	defer m.changes.Unlock()
+	if m.stopped {
+		return nil, 0
+	}
+	snapshot, handle := m.newSnapshot()
+	return NewLevelDBSnapshotWrapper(snapshot).Subset(frontierByte), handle
+}
+func (m *ldbManager) Get(identifier types.HashHeight) (DB, Handle) {
+	m.changes.Lock()
+	defer m.changes.Unlock()
+	if m.stopped {
+		return nil, 0
+	}
+	snapshot, handle := m.newSnapshot()
 	// check if has snapshot
 	frontier := NewLevelDBSnapshotWrapper(snapshot).Subset(frontierByte)
 	frontierIdentifier := GetFrontierIdentifier(frontier)
 
 	if identifier.IsZero() {
-		return NewMemDB()
+		m.release(handle)
+		return NewMemDB(), 0
 	}
 	if identifier == frontierIdentifier {
-		return frontier
+		return frontier, handle
 	}
 
 	trueIdentifier, err := GetIdentifierByHash(frontier, identifier.Hash)
 	if err == leveldb.ErrNotFound {
-		return nil
+		m.release(handle)
+		return nil, 0
 	}
 	common.DealWithErr(err)
 	if *trueIdentifier != identifier {
-		return nil
+		m.release(handle)
+		return nil, 0
 	}
 
 	var rawChanges db
@@ -262,6 +329,7 @@ func (m *ldbManager) Get(identifier types.HashHeight) DB {
 	for i := toIdentifier.Height + 1; i <= frontierIdentifier.Height; i += 1 {
 		rollback := m.getRollback(i)
 		if err := ApplyWithoutOverride(rawChanges, rollback); err != nil {
+			m.release(handle)
 			common.DealWithErr(err)
 		}
 	}
@@ -286,7 +354,7 @@ func (m *ldbManager) Get(identifier types.HashHeight) DB {
 				newSubDB(frontierByte, newLevelDBSnapshotWrapper(snapshot)),
 			})),
 	})
-	return enableDelete(u)
+	return enableDelete(u), handle
 }
 func (m *ldbManager) GetPatch(identifier types.HashHeight) Patch {
 	m.changes.Lock()
@@ -298,6 +366,7 @@ func (m *ldbManager) GetPatch(identifier types.HashHeight) Patch {
 }
 func (m *ldbManager) getPatch(identifier types.HashHeight) Patch {
 	snapshot, _ := m.ldb.GetSnapshot()
+	defer snapshot.Release()
 	value, err := snapshot.Get(common.JoinBytes(patchByte, common.Uint64ToBytes(identifier.Height)), nil)
 	if err == leveldb.ErrNotFound {
 		return nil
@@ -310,6 +379,7 @@ func (m *ldbManager) getPatch(identifier types.HashHeight) Patch {
 }
 func (m *ldbManager) getRollback(height uint64) Patch {
 	snapshot, _ := m.ldb.GetSnapshot()
+	defer snapshot.Release()
 	value, err := snapshot.Get(common.JoinBytes(rollbackByte, common.Uint64ToBytes(height)), nil)
 	if err == leveldb.ErrNotFound {
 		return nil
@@ -328,7 +398,8 @@ func (m *ldbManager) Add(transaction Transaction) error {
 	identifier := commits[len(commits)-1].Identifier()
 
 	// apply transaction on db
-	db := m.Get(previous)
+	db, handle := m.Get(previous)
+	defer m.release(handle)
 	if db == nil {
 		return errors.Errorf("can't find prev")
 	}
@@ -374,7 +445,9 @@ func (m *ldbManager) Add(transaction Transaction) error {
 	return nil
 }
 func (m *ldbManager) Pop() error {
-	frontierIdentifier := GetFrontierIdentifier(m.Frontier())
+	frontierDb, handle := m.Frontier()
+	defer m.release(handle)
+	frontierIdentifier := GetFrontierIdentifier(frontierDb)
 	rollbackPatch := m.getRollback(frontierIdentifier.Height)
 
 	if err := ApplyPatch(NewLevelDBWrapper(m.ldb).Subset(frontierByte), rollbackPatch); err != nil {
@@ -392,6 +465,16 @@ func (m *ldbManager) Pop() error {
 func (m *ldbManager) Stop() error {
 	m.changes.Lock()
 	defer m.changes.Unlock()
+
+	if len(m.snapshots) > 0 {
+		return errors.Errorf("unreleased snapshots %d", len(m.snapshots))
+	}
+
+	snaps, err := m.ldb.GetProperty("leveldb.alivesnaps")
+	if err != nil {
+		common.DealWithErr(err)
+	}
+	fmt.Printf("Alive snaps %s\n", snaps)
 	if err := m.ldb.Close(); err != nil {
 		return err
 	}

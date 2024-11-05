@@ -26,7 +26,9 @@ func (ct *chainTicker) IsFinished(tick uint64) bool {
 		panic("most probably an overflow error")
 	}
 	_, eTime := ct.ToTime(tick)
-	block, err := ct.GetFrontierMomentumStore().GetFrontierMomentum()
+	frontierStore := ct.GetFrontierMomentumStore()
+	defer ct.ReleaseMomentumStore(frontierStore)
+	block, err := frontierStore.GetFrontierMomentum()
 	common.DealWithErr(err)
 	if block.Timestamp.After(eTime) || block.Timestamp.Equal(eTime) {
 		return true
@@ -39,7 +41,9 @@ func (ct *chainTicker) HasStarted(tick uint64) bool {
 		panic("most probably an overflow error")
 	}
 	sTime, _ := ct.ToTime(tick)
-	block, err := ct.GetFrontierMomentumStore().GetFrontierMomentum()
+	frontierStore := ct.GetFrontierMomentumStore()
+	defer ct.ReleaseMomentumStore(frontierStore)
+	block, err := frontierStore.GetFrontierMomentum()
 	common.DealWithErr(err)
 	if block.Timestamp.Before(sTime) {
 		return false
@@ -53,7 +57,9 @@ func (ct *chainTicker) GetEndBlock(tick uint64) (*nom.Momentum, error) {
 		panic("most probably an overflow error")
 	}
 	_, eTime := ct.ToTime(tick)
-	block, err := ct.GetFrontierMomentumStore().GetMomentumBeforeTime(&eTime)
+	frontierStore := ct.GetFrontierMomentumStore()
+	defer ct.ReleaseMomentumStore(frontierStore)
+	block, err := frontierStore.GetMomentumBeforeTime(&eTime)
 	if err != nil {
 		return nil, err
 	}
@@ -92,6 +98,7 @@ func (ct *chainTicker) GetContent(tick uint64) ([]*nom.Momentum, error) {
 		}
 
 		store := ct.GetFrontierMomentumStore()
+		defer ct.ReleaseMomentumStore(store)
 		blocks, err := store.GetMomentumsByHeight(startBlock.Height+1, true, endBlock.Height-startBlock.Height)
 		if err != nil {
 			return nil, err
