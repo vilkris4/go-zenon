@@ -33,7 +33,13 @@ func NewChainBridge(chain chain.Chain, consensus consensus.Consensus, verifier v
 func (c chainBridge) AddAccountBlocks(blocks []*nom.AccountBlock) error {
 	insert := c.chain.AcquireInsert(fmt.Sprintf("Insert blocks in chain-bridge. Len:%v", len(blocks)))
 	defer insert.Unlock()
+	frontierIdentifier := c.chain.GetFrontierMomentumStore().Identifier()
 	for _, block := range blocks {
+		if block.MomentumAcknowledged.Height > frontierIdentifier.Height {
+			log.Debug("skipping received account block that uses momentum acknowledged height greater than our frontier height",
+				"acknowledged-height", block.MomentumAcknowledged.Height, "frontier-height", frontierIdentifier.Height, "block-identifier", block.Identifier())
+			continue
+		}
 		if patch := c.chain.GetPatch(block.Address, block.Identifier()); patch != nil {
 			continue
 		}
