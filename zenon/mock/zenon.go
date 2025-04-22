@@ -256,7 +256,7 @@ func (zenon *mockZenon) InsertReceiveBlock(fromHeader types.AccountHeader, templ
 		template.FromBlockHash = fromBlock.Hash
 	}
 
-	transaction, err := zenon.supervisor.GenerateFromTemplate(template, getSignFunc(fromBlock.ToAddress))
+	transaction, err := zenon.supervisor.GenerateFromTemplate(template, getSignFunc(template.Address))
 
 	common.ExpectError(zenon.t, err, expectedError)
 	if err == nil {
