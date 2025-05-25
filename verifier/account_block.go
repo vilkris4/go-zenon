@@ -14,6 +14,10 @@ import (
 	"github.com/zenon-network/go-zenon/wallet"
 )
 
+var (
+	ReceiverMismatchEnforcementHeight uint64 = 10109240 // Targeting 2025-04-16 12:00:00 UTC
+)
+
 func isBatched(block *nom.AccountBlock) bool {
 	return block.IsSendBlock() && types.IsEmbeddedAddress(block.Address)
 }
@@ -348,6 +352,13 @@ func (abv *accountBlockVerifier) fromHash() error {
 		return InternalError(err)
 	} else if sendBlock == nil {
 		return ErrABFromBlockMissing
+	}
+
+	if abv.block.Address != sendBlock.ToAddress {
+		// Use the momentum ledger's true frontier height when comparing
+		if abv.frontierStore.Identifier().Height >= ReceiverMismatchEnforcementHeight {
+			return ErrABFromBlockReceiverMismatch
+		}
 	}
 
 	// check if abv.block was already received
