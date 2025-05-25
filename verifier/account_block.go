@@ -281,7 +281,16 @@ func (abv *accountBlockVerifier) previous() error {
 	return nil
 }
 func (abv *accountBlockVerifier) momentumAcknowledged() error {
-	if abv.momentumStore != nil {
+	if abv.momentumStore == nil {
+		// When the momentumStore is not used, explicitly verify that the block's acknowledgement momentum exists
+		m, err := abv.frontierStore.GetMomentumByHeight(abv.block.MomentumAcknowledged.Height)
+		if err != nil {
+			return InternalError(err)
+		}
+		if m == nil || m.Hash != abv.block.MomentumAcknowledged.Hash {
+			return ErrABMAMissing
+		}
+	} else {
 		momentum, err := abv.momentumStore.GetFrontierMomentum()
 		if err != nil {
 			return InternalError(err)
